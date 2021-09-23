@@ -10,7 +10,7 @@ def get_gradient(b_field, l_eff=0.108):
     ''' Returns the quad field gradient [T/m] 
         l_eff: effective length [m] 
         b_field: integrated field [kG] '''
-    return b_field *0.1 /l_eff
+    return np.array(b_field)*0.1 /l_eff
     
 def get_k1(g, p):
     '''Returns quad strength [1/m^2]
@@ -68,10 +68,10 @@ def get_normemit(energy, quad_vals, xrms, yrms, show_plots=False):
     b1_gradient = get_gradient(quad_vals)
     k = get_k1(b1_gradient, beta*energy)
 
-    sig_11, sig_12, sig_22 = fit_sigma(xrms, k, show_plots=show_plots)
+    sig_11, sig_12, sig_22 = fit_sigma(np.array(xrms), k, show_plots=show_plots)
     emitx = get_emit(sig_11, sig_12, sig_22)
 
-    sig_11, sig_12, sig_22 = fit_sigma(yrms, -k, show_plots=show_plots)
+    sig_11, sig_12, sig_22 = fit_sigma(np.array(yrms), -k, show_plots=show_plots)
     emity = get_emit(sig_11, sig_12, sig_22)
 
     if emitx == 1000 or emity == 1000:
