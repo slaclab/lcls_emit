@@ -34,7 +34,7 @@ def fit_gaussian_linear_background(y, para0 = None, show_plots=False, cut_area =
     except:
         print("Fitting failed.")
         para = para0 
-        para_error = []
+        para_error = [0]*len(para0)
 
     para[2] = abs(para[2])  # Gaussian width is postivie definite
     # contraints on the output fit parameters
