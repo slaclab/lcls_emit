@@ -160,7 +160,14 @@ def adapt_range(x, y, fit_coefs, x_fit, axis, num_points, save_plot=False, show_
         roots[1] = max_x_range
         
     # have at least 3 scanning points within roots
-    x_fine_fit = np.linspace(roots[0], roots[1], num_points)
+    range_fit = np.max(roots)-np.min(roots)
+    if range_fit<1:
+        x_fine_fit = np.linspace(np.min(roots)-1, np.max(roots)+1, num_points)
+    elif range_fit>10:
+        x_fine_fit = np.linspace(np.min(roots)+2, np.max(roots)-2, num_points)
+    else:
+        x_fine_fit = np.linspace(roots[0], roots[1], num_points)
+
         
     # GET NEW BEAMSIZES 
     # this takes B in kG not K

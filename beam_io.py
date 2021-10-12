@@ -53,13 +53,13 @@ def getbeamsizes():
     beam_image.subtract_bg()
     beam_image.get_im_projection()
     # fit the profile and return the beamsizes
-    return beam_image.get_sizes(show_plots=True)
+    return beam_image.get_sizes(show_plots=False)
 
 def get_sizes(quad):
     """Get size should take a quad B field in kG and return [xrms, yrms] in meters"""
     setquad(quad)
     time.sleep(3)
-    beamsizes = getbeamsizes()[0:2]*resolution # convert to meters
+    beamsizes = np.array(getbeamsizes())[0:2]*resolution # convert to meters
     xrms = beamsizes[0]
     yrms = beamsizes[1]
     return xrms, yrms

@@ -47,8 +47,7 @@ def fit_gaussian_linear_background(y, para0 = None, show_plots=False, cut_area =
     if abs(para[1]) >= len(x):
         para[1] = len(x)
         
-    if show_plots:
-        plot_fit(x, y, para)
+    plot_fit(x, y, para, show_plots=show_plots)
 
     return para[0:3], np.sqrt(np.diag(para_error))[0:3] 
 
@@ -85,7 +84,7 @@ def find_rms_cut_area(y, para0 = None, show_plots=False, cut_area = 0.05):
 
     return para, para_errors
 
-def plot_fit(x, y, para_x, show_plot=True):
+def plot_fit(x, y, para_x, show_plots=True):
     timestamp = (datetime.datetime.now()).strftime("%m-%d_%H-%M-%S")
     fig = plt.figure(figsize=(7 ,5))
     plt.plot(x, y, 'b-', label='data')
@@ -94,6 +93,6 @@ def plot_fit(x, y, para_x, show_plot=True):
     plt.ylabel("Counts")
     plt.legend()
     plt.savefig(f"./plots/beamsize_fit_{timestamp}.png")
-    if show_plot:
+    if show_plots:
         plt.show()
     
