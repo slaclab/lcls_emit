@@ -1,4 +1,5 @@
 import numpy.polynomial.polynomial as poly
+import datetime
 import numpy as np 
 import warnings
 
@@ -32,20 +33,27 @@ def fit_sigma(sizes, k, axis, d=d, l=l, adapt_ranges=False, num_points=5, show_p
     
     xfit = np.linspace(min_k, max_k, 100)
 
+    #plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
+    
     if adapt_ranges:
         try:
             coefs = adapt_range(k, sizes, coefs, xfit, axis=axis, num_points=num_points,\
                                 save_plot=True, show_plots=show_plots)
             # log data
+            timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
             if axis=="x":
-                save_data(0,0,0,0,sizes,0,k,0,adapt_ranges)
+                save_data(timestamp,0,0,0,0,sizes,0,k,0,str(adapt_ranges))
             if axis=="y":
-                save_data(0,0,0,0,0,sizes,0,k,adapt_ranges)
-        except NameError:
-            print("Error: A function to get beamsizes is not defined. Returning original fit.")
-            plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
+                save_data(timestamp,0,0,0,0,0,sizes,0,k,str(adapt_ranges))
+#         except NameError:
+#             print("Error: A function to get beamsizes is not defined. Returning original fit.")
+#             plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
         except ValueError:
-            print("Error: Cannot adapt quad ranges. Returning original fit.")           
+            print("Error: Cannot adapt quad ranges. Returning original fit.")
+            plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
+        except InvertedFitError:
+            print("Error: Cannot adapt quad ranges due to inverted poly. Returning original fit.")
+            plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)     
     else:
         plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
         
@@ -88,9 +96,7 @@ def get_bmag(sig11, sig12, sig22, emit, axis):
 
 def get_normemit(energy, xrange, yrange, xrms, yrms, adapt_ranges=False, num_points=5, show_plots=False):
     """Returns normalized emittance [m]
-       given quad values and beamsizes"""
-    timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
-    
+       given quad values and beamsizes"""    
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
 
@@ -108,7 +114,8 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, adapt_ranges=False, num_poi
     bmagy = get_bmag(sig_11, sig_12, sig_22, emity, axis='y')
     
     # log data
-    save_data(timestamp,emitx*gamma*beta,emity*gamma*beta,bmagx,bmagy,xrms,yrms,kx,ky,adapt_ranges)
+    timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
+    save_data(timestamp,emitx*gamma*beta,emity*gamma*beta,bmagx,bmagy,xrms,yrms,kx,ky,str(adapt_ranges))
         
     if np.isnan(emitx) or np.isnan(emity):
         return np.nan, np.nan, np.nan, np.nan
@@ -118,7 +125,7 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, adapt_ranges=False, num_poi
 
     return emitx*gamma*beta, emity*gamma*beta, bmagx, bmagy
 
-def plot_fit(x, y, fit_coefs, x_fit, axis, save_plot=True, show_plots=False):
+def plot_fit(x, y, fit_coefs, x_fit, axis, save_plot=True, show_plots=False, title_suffix=""):
     """Plot and save the emittance fits of size**2 vs k"""
     import matplotlib.pyplot as plt
     import datetime
@@ -129,7 +136,7 @@ def plot_fit(x, y, fit_coefs, x_fit, axis, save_plot=True, show_plots=False):
     
     plt.xlabel(r"k (1/m$^2$)")
     plt.ylabel(r"sizes$^2$ (m$^2$)")
-    plt.title(f"{axis}-axis")
+    plt.title(f"{axis}-axis "+title_suffix)
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     if save_plot:
@@ -161,12 +168,20 @@ def adapt_range(x, y, fit_coefs, x_fit, axis, num_points, save_plot=False, show_
         
     c0, c1, c2 = fit_coefs
     
-    # find range within ~2x the focus size 
-    y_lim = np.min(poly.polyval(x_fit, fit_coefs))*2
+    if c2<0:
+        inverted_function = True
+    else:
+        inverted_function = False
+    
+    # find range within 2-3x the focus size 
+    y_lim = np.min(poly.polyval(x_fit, fit_coefs))*4 
+    if y_lim<0:
+        print(f"{axis} axis: min. of poly fit is negative. Setting it to 0.")
+        y_lim = 0
     roots = poly.polyroots((c0-y_lim, c1, c2))
     # Flag bad fit with complex roots
     if np.iscomplex(roots).any():
-        print("Bad emit fit, complex root encountered.")
+        print("Bad emittance fit, complex root encountered.")
         raise ValueError("Cannot adapt quad ranges.")
     
     # if roots are outside quad scanning range, set to scan range lim
@@ -177,10 +192,38 @@ def adapt_range(x, y, fit_coefs, x_fit, axis, num_points, save_plot=False, show_
         
     # have at least 3 scanning points within roots
     range_fit = np.max(roots)-np.min(roots)
-    if range_fit<1:
-        x_fine_fit = np.linspace(np.min(roots)-1, np.max(roots)+1, num_points)
-    elif range_fit>10:
-        x_fine_fit = np.linspace(np.min(roots)+2, np.max(roots)-2, num_points)
+    if range_fit<2:
+        # need at least 3 points for polynomial fit
+        x_fine_fit = np.linspace(np.min(roots)-1.5, np.max(roots)+1.5, num_points)
+        
+    if inverted_function:
+        print("Adjusting inverted poly.")
+        # go to minimum side of inverted polynomials
+        x_min_inverted = x[np.argmin(y)]
+        
+        #find the direction of sampling to minimum
+        if (x[np.argmin(y)] - x[np.argmin(y)-2])<0:
+            x_max_inverted = min_x_range
+        else:
+            x_max_inverted = max_x_range
+        
+        if (x_max_inverted-x_min_inverted)>8:
+            # if range is too big, narrow it down on the larger side
+            x_min_inverted = x_min_inverted - 4
+            
+        x_fine_fit = np.linspace(x_min_inverted, x_max_inverted, num_points)
+        
+    elif (np.max(roots)-np.min(roots))>8:
+        # need to concentrate around min!
+        dist_min = np.abs(x[np.argmin(y)]-np.min(roots))
+        dist_max = np.abs(x[np.argmin(y)]-np.max(roots))
+        if dist_min<dist_max:
+            x_fine_fit = np.linspace(np.min(roots), np.max(roots)-4, num_points)
+        elif dist_min>dist_max:
+            x_fine_fit = np.linspace(np.min(roots)+4, np.max(roots), num_points)
+        else:
+            x_fine_fit = np.linspace(np.min(roots)+2, np.max(roots)-2, num_points)
+            
     else:
         x_fine_fit = np.linspace(roots[0], roots[1], num_points)
 
@@ -189,11 +232,8 @@ def adapt_range(x, y, fit_coefs, x_fit, axis, num_points, save_plot=False, show_
     # this takes B in kG not K
     if axis=="x":
         fine_fit_sizes = np.array([get_updated_beamsizes(get_quad_field(ele))[0] for ele in x_fine_fit])
-#        fine_fit_sizes = np.array([get_updated_beamsizes(get_quad_field(x_fine_fit))])
-
     elif axis == "y":
         fine_fit_sizes = np.array([get_updated_beamsizes(-get_quad_field(ele))[1] for ele in x_fine_fit])
-#        fine_fit_sizes = np.array([get_updated_beamsizes(-get_quad_field(x_fine_fit))])
     
     # fit
     coefs = poly.polyfit(x_fine_fit, fine_fit_sizes**2, 2)
@@ -203,7 +243,11 @@ def adapt_range(x, y, fit_coefs, x_fit, axis, num_points, save_plot=False, show_
     return coefs
 
 def save_data(timestamp, nex, ney, bmx, bmy, xsizes, ysizes, kx, ky, adapted):
-    from epics import caget
     f= open(f"emit_calc_log.csv", "a+")
     f.write(f"{timestamp},{nex},{ney},{bmx},{bmy},{xsizes},{ysizes},{kx},{ky},{adapted}\n")
     f.close()
+    
+class InvertedFitError(Exception):
+    """Raised when the adapted range emit 
+    fit results in inverted polynomial"""
+    pass
