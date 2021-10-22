@@ -2,7 +2,7 @@ import numpy.polynomial.polynomial as poly
 import numpy as np 
 import warnings
 
-from beam_io import get_sizes
+from beam_io import get_updated_beamsizes
 
 m_0 = 0.511*1e-3 # mass in [GeV]
 d = 2.26 # [m] distance between Q525 and OTR2
@@ -36,9 +36,16 @@ def fit_sigma(sizes, k, axis, d=d, l=l, adapt_ranges=False, num_points=5, show_p
         try:
             coefs = adapt_range(k, sizes, coefs, xfit, axis=axis, num_points=num_points,\
                                 save_plot=True, show_plots=show_plots)
+            # log data
+            if axis=="x":
+                save_data(0,0,0,0,sizes,0,k,0,adapt_ranges)
+            if axis=="y":
+                save_data(0,0,0,0,0,sizes,0,k,adapt_ranges)
         except NameError:
             print("Error: A function to get beamsizes is not defined. Returning original fit.")
             plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
+        except ValueError:
+            print("Error: Cannot adapt quad ranges. Returning original fit.")           
     else:
         plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
         
@@ -60,7 +67,7 @@ def get_emit(sig11, sig12, sig22):
             emit  = np.sqrt(sig11*sig22 - sig12**2)
             return emit
     except RuntimeWarning:
-        return 1000 # arbitrary high value, maybe the best way to handle this?
+        return np.nan 
     
 def get_bmag(sig11, sig12, sig22, emit, axis):
     """Calculates Bmag from calculated emittance
@@ -82,6 +89,8 @@ def get_bmag(sig11, sig12, sig22, emit, axis):
 def get_normemit(energy, xrange, yrange, xrms, yrms, adapt_ranges=False, num_points=5, show_plots=False):
     """Returns normalized emittance [m]
        given quad values and beamsizes"""
+    timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
+    
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
 
@@ -98,8 +107,11 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, adapt_ranges=False, num_poi
     emity = get_emit(sig_11, sig_12, sig_22)
     bmagy = get_bmag(sig_11, sig_12, sig_22, emity, axis='y')
     
-    if emitx == 1000 or emity == 1000:
-        return 1000
+    # log data
+    save_data(timestamp,emitx*gamma*beta,emity*gamma*beta,bmagx,bmagy,xrms,yrms,kx,ky,adapt_ranges)
+        
+    if np.isnan(emitx) or np.isnan(emity):
+        return np.nan, np.nan, np.nan, np.nan
     
     print(f"nemitx: {emitx*gamma*beta/1e-6:.2f}, nemity: {emity*gamma*beta/1e-6:.2f}")
     print(f"bmagx: {bmagx:.2f}, bmagy: {bmagy:.2f}")
@@ -118,13 +130,13 @@ def plot_fit(x, y, fit_coefs, x_fit, axis, save_plot=True, show_plots=False):
     plt.xlabel(r"k (1/m$^2$)")
     plt.ylabel(r"sizes$^2$ (m$^2$)")
     plt.title(f"{axis}-axis")
-    timestamp = (datetime.datetime.now()).strftime("%m-%d_%H-%M-%S")
+    timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     if save_plot:
         try:
-            plt.savefig(f"./plots/emittance_fit_{timestamp}.png", dpi=300)
+            plt.savefig(f"./plots/emittance_{axis}_fit_{timestamp}.png", dpi=100)
         except:
-            plt.savefig(f"./emittance_fit_{timestamp}.png", dpi=300)
+            plt.savefig(f"./emittance_fit_{axis}_{timestamp}.png", dpi=100)
     if show_plots:
         plt.show()
     plt.close()
@@ -134,6 +146,7 @@ def get_quad_field(k, energy=0.135, l=0.108):
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
     return np.array(k)*l/0.1/0.2998*energy*beta
+
 
 def adapt_range(x, y, fit_coefs, x_fit, axis, num_points, save_plot=False, show_plots=True):
     """Adjust scanning range for a given axis to fit around minimum"""
@@ -150,8 +163,11 @@ def adapt_range(x, y, fit_coefs, x_fit, axis, num_points, save_plot=False, show_
     
     # find range within ~2x the focus size 
     y_lim = np.min(poly.polyval(x_fit, fit_coefs))*2
-    # TODO?: could it have more than two roots if it's a horribly bad fit?
-    roots = poly.polyroots((c0-y_lim, c1, c2))      
+    roots = poly.polyroots((c0-y_lim, c1, c2))
+    # Flag bad fit with complex roots
+    if np.iscomplex(roots).any():
+        print("Bad emit fit, complex root encountered.")
+        raise ValueError("Cannot adapt quad ranges.")
     
     # if roots are outside quad scanning range, set to scan range lim
     if roots[0]<min_x_range:
@@ -172,12 +188,12 @@ def adapt_range(x, y, fit_coefs, x_fit, axis, num_points, save_plot=False, show_
     # GET NEW BEAMSIZES 
     # this takes B in kG not K
     if axis=="x":
-        fine_fit_sizes = np.array([get_sizes(get_quad_field(ele))[0] for ele in x_fine_fit])
-#        fine_fit_sizes = np.array([get_sizes(get_quad_field(x_fine_fit))])
+        fine_fit_sizes = np.array([get_updated_beamsizes(get_quad_field(ele))[0] for ele in x_fine_fit])
+#        fine_fit_sizes = np.array([get_updated_beamsizes(get_quad_field(x_fine_fit))])
 
     elif axis == "y":
-        fine_fit_sizes = np.array([get_sizes(-get_quad_field(ele))[1] for ele in x_fine_fit])
-#        fine_fit_sizes = np.array([get_sizes(-get_quad_field(x_fine_fit))])
+        fine_fit_sizes = np.array([get_updated_beamsizes(-get_quad_field(ele))[1] for ele in x_fine_fit])
+#        fine_fit_sizes = np.array([get_updated_beamsizes(-get_quad_field(x_fine_fit))])
     
     # fit
     coefs = poly.polyfit(x_fine_fit, fine_fit_sizes**2, 2)
@@ -185,3 +201,9 @@ def adapt_range(x, y, fit_coefs, x_fit, axis, num_points, save_plot=False, show_
     plot_fit(x_fine_fit, fine_fit_sizes, coefs, xfit, axis=axis, save_plot=save_plot, show_plots=show_plots)
     
     return coefs
+
+def save_data(timestamp, nex, ney, bmx, bmy, xsizes, ysizes, kx, ky, adapted):
+    from epics import caget
+    f= open(f"emit_calc_log.csv", "a+")
+    f.write(f"{timestamp},{nex},{ney},{bmx},{bmy},{xsizes},{ysizes},{kx},{ky},{adapted}\n")
+    f.close()

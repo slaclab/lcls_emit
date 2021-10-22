@@ -22,6 +22,8 @@ class Image:
         self.xrms_error = None
         self.yrms_error = None
         
+        #self.low_intensity_flag = False
+        
     def reshape_im(self, im = None):
         """Reshapes flattened OTR image to 2D array"""
         self.proc_image = self.flat_image.reshape(self.ncol,self.nrow)
@@ -51,14 +53,18 @@ class Image:
             }
         return fit_type_dict[name](*args, **kwargs)
 
-    def get_sizes(self, method = "gaussian", show_plots = True, cut_area = 0.05):
+    def get_sizes(self, method = "gaussian", show_plots = False, cut_area = 0.05):
         """Takes an image (2D array) and optional bg image, finds x and y projections,
         and fits with desired method. Current options are "gaussian" or "rms cut area".
         Returns size in x, size in y, error on x size, error on  y size"""
-
+        
         # Find statistics
         para_x, para_error_x = self.dispatch(method, self.x_proj, para0=None, cut_area=cut_area, show_plots=show_plots)
         para_y, para_error_y = self.dispatch(method, self.y_proj, para0=None, cut_area=cut_area, show_plots=show_plots)
+        
+#         if para_x[0]<=1500 or para_y[0]<=1500 :
+#             print(f"Low x peak amplitude: amp_x = {para_x[0]:.1f}, amp_y = {para_y[0]:.1f}.")
+#             self.low_intensity_flag = True
 
         #      size in x, size in y, error on x size, error on  y size
         self.xrms, self.yrms, self.xrms_error, self.yrms_error = \

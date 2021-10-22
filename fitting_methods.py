@@ -21,18 +21,14 @@ def fit_gaussian_linear_background(y, para0 = None, show_plots=False, cut_area =
         offset0 =  np.mean(y[-10:]) #y.min()
         amp0 = y.max() - offset0
         mu0 = x[np.argwhere(y==y.max())][0].item() # get the first element if more than two 
-        try:
-            sigma0 = (x[np.argwhere(y>np.exp(-0.5*2**2)*amp0+offset0).max()]\
-                      - x[np.argwhere(y>np.exp(-0.5*2**2)*amp0+offset0).min()] )/(2*2)
-        except:
-            sigma0 = 5
+        sigma0 = 5
         slope0 = 0
         para0 = [amp0, mu0, sigma0, slope0, offset0]
 
     try:
         para, para_error = curve_fit(gaussian_linear_background, x, y, p0 = para0)
     except:
-        print("Fitting failed.")
+        print("Fitting failed, taking initial guess.")
         para = para0 
         para_error = [0]*len(para0)
 
@@ -49,7 +45,14 @@ def fit_gaussian_linear_background(y, para0 = None, show_plots=False, cut_area =
         
     plot_fit(x, y, para, show_plots=show_plots)
 
-    return para[0:3], np.sqrt(np.diag(para_error))[0:3] 
+    # taking relevant parameters
+    para_vals = para[0:3]
+    if np.any(para_error<0):
+        para_err_vals = [0]*len(para_vals)
+    else:
+        para_err_vals = np.sqrt(np.diag(para_error))[0:3] 
+        
+    return para_vals, para_err_vals 
 
 def find_rms_cut_area(y, para0 = None, show_plots=False, cut_area = 0.05):
     """Takes a distribution (ndarray) and the desired cut area (5% is default). 
@@ -84,15 +87,19 @@ def find_rms_cut_area(y, para0 = None, show_plots=False, cut_area = 0.05):
 
     return para, para_errors
 
-def plot_fit(x, y, para_x, show_plots=True):
-    timestamp = (datetime.datetime.now()).strftime("%m-%d_%H-%M-%S")
+def plot_fit(x, y, para_x, show_plots=False):
+    timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     fig = plt.figure(figsize=(7 ,5))
     plt.plot(x, y, 'b-', label='data')
-    plt.plot(x, gaussian_linear_background(x, *para_x), 'r-', label='fit: amp=%f, centroid=%f, sigma=%f' % tuple(para_x[:3]))
+    plt.plot(x, gaussian_linear_background(x, *para_x), 'r-', \
+             label=f'fit: amp={para_x[0]:.1f}, centroid={para_x[1]:.1f}, sigma={para_x[2]:.1f}')
     plt.xlabel("Pixel")
     plt.ylabel("Counts")
-    plt.legend()
-    plt.savefig(f"./plots/beamsize_fit_{timestamp}.png")
+    plt.legend(loc="lower center", bbox_to_anchor=(0.5, -0.3))
+    plt.tight_layout()
+    
+    plt.savefig(f"./plots/beamsize_fit_{timestamp}.png", dpi=100)
     if show_plots:
         plt.show()
+    plt.close()
     
