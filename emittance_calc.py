@@ -4,8 +4,8 @@ import numpy as np
 import warnings
 
 # for running on the machine
-from beam_io import get_updated_beamsizes
-get_sizes = get_updated_beamsizes
+# from beam_io import get_updated_beamsizes
+# get_sizes = get_updated_beamsizes
 
 # constants for Q525 ONLY 
 # TODO: clean up LCLS/machine specific info
@@ -265,7 +265,8 @@ def adapt_range(x, y, axis, fit_coefs=None, x_fit=None, energy=0.135, num_points
     if return_range:
         # if this function is called without initial scan
         # return the new quad measurement range for this axis (in kG!!)
-        return np.array([get_quad_field(ele) for ele in x_fine_fit])
+        sign = -1 if axis=="y" else 1
+        return np.array([sign*get_quad_field(ele) for ele in x_fine_fit])
         
     # GET NEW BEAMSIZES if returning new coefs to emit fn
     # this takes B in kG not K
