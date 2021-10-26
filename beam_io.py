@@ -1,5 +1,5 @@
 import numpy as np
-import sys
+import sys, os, errno
 import json
 import time
 import datetime
@@ -19,9 +19,9 @@ from image import Image
 # get PV info
 pv_info = json.load(open('pv_info.json'))
 
-im_pv = pv_info['device']['OTR2']['image']
-n_col_pv = pv_info['device']['OTR2']['ncol']
-n_row_pv = pv_info['device']['OTR2']['nrow']
+im_pv = "OTRS:IN20:571:IMAGE"
+n_col_pv = "OTRS:IN20:571:ROI_YNP"
+n_row_pv = "OTRS:IN20:571:ROI_XNP"
 
 meas_input = pv_info['device']['QUAD']['Q525']
 quad_act = "QUAD:IN20:525:BACT"
@@ -33,14 +33,16 @@ x_size_pv = pv_info['device']['OTR2']['profmonxsize']
 y_size_pv = pv_info['device']['OTR2']['profmonysize']
 
 energy = caget(pv_info['energy']['DL1'])
-resolution = caget(pv_info['device']['OTR2']['resolution'])*1e-6 # in meters for emittance calc
-
+#resolution = caget(pv_info['device']['OTR2']['resolution'])*1e-6 # in meters for emittance calc
+# MD update 10/22
+resolution = 12.23*1e-6
 
 def setquad(value):
     """Sets Q525 to new scan value"""
     caput(meas_input, value)
     
 def saveimage(im, ncol, nrow, beamsizes):
+    mkdir_p("saved_images")
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     np.save(f'./saved_images/img_{timestamp}.npy', im)
     np.save(f'./saved_images/ncol_{timestamp}.npy', ncol)
@@ -67,12 +69,11 @@ def getbeamsizes(avg_num_images=1):
     beam_image = Image(im, ncol, nrow, bg_image = None)
     beam_image.reshape_im()
     beam_image.subtract_bg()
+    #beam_image.proc_image = beam_image.proc_image[200:900, 1000:]
     beam_image.get_im_projection()
     
     # fit the profile and return the beamsizes
     beamsizes = beam_image.get_sizes(show_plots=False)
-#     if beam_image.low_intensity_flag:
-#         low_intensity_beam() 
 
     saveimage(im, ncol, nrow, beamsizes*resolution/1e-6) # pass beamsizes in um
     return beamsizes 
@@ -86,10 +87,12 @@ def get_updated_beamsizes(quad):
     yrms = beamsizes[1]
     return xrms, yrms
 
-# def low_intensity_beam(reset=False):
-#     global low_intensity_flag
-#     if reset:
-#         low_intensity_flag = False
-#     else:
-#         low_intensity_flag = True
-    
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc:
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else:
+            raise
+ 
