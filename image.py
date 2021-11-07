@@ -21,6 +21,14 @@ class Image:
         self.yrms = None
         self.xrms_error = None
         self.yrms_error = None
+        self.xcen = None
+        self.ycen = None
+        self.xcen_error = None
+        self.ycen_error = None
+        self.xamp = None
+        self.yamp = None
+        self.xamp_error = None
+        self.yamp_error = None
         
         #self.low_intensity_flag = False
         
@@ -65,9 +73,15 @@ class Image:
 #         if para_x[0]<=1500 or para_y[0]<=1500 :
 #             print(f"Low x peak amplitude: amp_x = {para_x[0]:.1f}, amp_y = {para_y[0]:.1f}.")
 #             self.low_intensity_flag = True
+        self.xamp, self.yamp, self.xamp_error, self.yamp_error = \
+        para_x[0],  para_y[0], para_error_x[0], para_error_y[0]
+
+        self.xcen, self.ycen, self.xcen_error, self.ycen_error = \
+        para_x[1],  para_y[1], para_error_x[1], para_error_y[1]
 
         #      size in x, size in y, error on x size, error on  y size
         self.xrms, self.yrms, self.xrms_error, self.yrms_error = \
         para_x[2],  para_y[2], para_error_x[2], para_error_y[2]
+     
         
         return self.xrms, self.yrms, self.xrms_error, self.yrms_error 
