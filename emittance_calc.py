@@ -2,13 +2,10 @@ import numpy.polynomial.polynomial as poly
 import datetime
 import numpy as np 
 import warnings
+import sys, os, errno
 
-# for running on the machine
-# from beam_io import get_updated_beamsizes
-# get_sizes = get_updated_beamsizes
+from beam_io import get_updated_beamsizes
 
-# constants for Q525 ONLY 
-# TODO: clean up LCLS/machine specific info
 m_0 = 0.511*1e-3 # mass in [GeV]
 d = 2.26 # [m] distance between Q525 and OTR2
 l = 0.108 # effective length [m]
@@ -51,7 +48,7 @@ def fit_sigma(sizes, k, axis, d=d, l=l, adapt_ranges=False, num_points=5, show_p
     
     if adapt_ranges:
         try:
-            coefs = adapt_range(k, sizes, axis=axis, fit_coefs=coefs, x_fit=xfit, num_points=num_points,\
+            coefs = adapt_range(k, sizes, coefs, xfit, axis=axis, num_points=num_points,\
                                 save_plot=True, show_plots=show_plots)
             # log data
             timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
@@ -62,11 +59,11 @@ def fit_sigma(sizes, k, axis, d=d, l=l, adapt_ranges=False, num_points=5, show_p
 #         except NameError:
 #             print("Error: A function to get beamsizes is not defined. Returning original fit.")
 #             plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
-#         except ValueError:
-#             print("Error: Cannot adapt quad ranges. Returning original fit.")
-#             plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
-        except ConcaveFitError:
-            print("Error: Cannot adapt quad ranges due to concave poly. Returning original fit.")
+        except ValueError:
+            print("Error: Cannot adapt quad ranges. Returning original fit.")
+            plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
+        except InvertedFitError:
+            print("Error: Cannot adapt quad ranges due to inverted poly. Returning original fit.")
             plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)     
     else:
         plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
@@ -95,7 +92,6 @@ def get_bmag(sig11, sig12, sig22, emit, axis):
     """Calculates Bmag from calculated emittance
     and from initial Twiss at OTR2: HARDCODED from Matlab GUI"""
     # HARDCODED INIT TWISS PARAMS
-    # TODO: clean up LCLS/machine specific info
     twiss0 = [1e-6, 1e-6, 1.113081026, 1.113021659, -6.89403587e-2, -7.029489754e-2]
     
     beta0 =  twiss0[2] if axis == 'x' else twiss0[3] if axis == 'y' else 0
@@ -112,19 +108,19 @@ def get_bmag(sig11, sig12, sig22, emit, axis):
 def get_normemit(energy, xrange, yrange, xrms, yrms, adapt_ranges=False, num_points=5, show_plots=False):
     """Returns normalized emittance [m]
        given quad values and beamsizes"""    
-#   mkdir_p("plots")
+    mkdir_p("plots")
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
 
-    kx =  get_k1(get_gradient(xrange), beta*energy)
-    ky = -get_k1(get_gradient(yrange), beta*energy)
+    kx = get_k1(get_gradient(xrange), beta*energy)
+    ky = get_k1(get_gradient(yrange), beta*energy)
     
     sig_11, sig_12, sig_22 = fit_sigma(np.array(xrms), kx, axis='x',\
                                        adapt_ranges=adapt_ranges, num_points=num_points, show_plots=show_plots)
     emitx = get_emit(sig_11, sig_12, sig_22)
     bmagx = get_bmag(sig_11, sig_12, sig_22, emitx, axis='x')
 
-    sig_11, sig_12, sig_22 = fit_sigma(np.array(yrms), ky, axis='y',\
+    sig_11, sig_12, sig_22 = fit_sigma(np.array(yrms), -ky, axis='y',\
                                        adapt_ranges=adapt_ranges, num_points=num_points, show_plots=show_plots)
     emity = get_emit(sig_11, sig_12, sig_22)
     bmagy = get_bmag(sig_11, sig_12, sig_22, emity, axis='y')
@@ -171,29 +167,8 @@ def get_quad_field(k, energy=0.135, l=0.108):
     return np.array(k)*l/0.1/0.2998*energy*beta
 
 
-def adapt_range(x, y, axis, fit_coefs=None, x_fit=None, energy=0.135, num_points=5, save_plot=False, show_plots=True):
+def adapt_range(x, y, fit_coefs, x_fit, axis, num_points, save_plot=False, show_plots=True):
     """Adjust scanning range for a given axis to fit around minimum"""
-    """Returns new scan quad values if called without initial fit coefs"""
-    """Returns new coefs if called from fit_sigma with initial fit coefs"""
-    if fit_coefs is None:
-        return_range = True
-        
-        gamma = energy/m_0
-        beta = np.sqrt(1-1/gamma**2)
-        k = get_k1(get_gradient(x), beta*energy)        
-
-        if axis == 'x':
-            min_k, max_k = np.min(k), 0
-        elif axis == 'y':
-            k=-k
-            min_k, max_k = np.min(k), np.max(k)
-        
-        fit_coefs = poly.polyfit(k, y**2, 2)
-        x_fit = np.linspace(min_k, max_k, 100)
-        x=k
-    else:
-        return_range = False 
-        
     if axis == 'x':
         min_x, max_x = np.min(x), 0
         # quad ranges 0 to -10 kG for scanning
@@ -206,9 +181,9 @@ def adapt_range(x, y, axis, fit_coefs=None, x_fit=None, energy=0.135, num_points
     c0, c1, c2 = fit_coefs
     
     if c2<0:
-        concave_function = True
+        inverted_function = True
     else:
-        concave_function = False
+        inverted_function = False
     
     # find range within 2-3x the focus size 
     y_lim = np.min(poly.polyval(x_fit, fit_coefs))*4 
@@ -218,8 +193,8 @@ def adapt_range(x, y, axis, fit_coefs=None, x_fit=None, energy=0.135, num_points
     roots = poly.polyroots((c0-y_lim, c1, c2))
     # Flag bad fit with complex roots
     if np.iscomplex(roots).any():
-        print("Cannot adapt quad ranges, complex root encountered.")
-        raise ValueError("")
+        print("Bad emittance fit, complex root encountered.")
+        raise ValueError("Cannot adapt quad ranges.")
     
     # if roots are outside quad scanning range, set to scan range lim
     if roots[0]<min_x_range:
@@ -233,20 +208,22 @@ def adapt_range(x, y, axis, fit_coefs=None, x_fit=None, energy=0.135, num_points
         # need at least 3 points for polynomial fit
         x_fine_fit = np.linspace(np.min(roots)-1.5, np.max(roots)+1.5, num_points)
         
-    if concave_function:
-        print("Adjusting concave poly.")
-        # go to lower side of concave polynomials 
-        # (assuming it is closer to the local minimum)
-        x_min_concave = x[np.argmin(y)]
+    if inverted_function:
+        print("Adjusting inverted poly.")
+        # go to minimum side of inverted polynomials
+        x_min_inverted = x[np.argmin(y)]
+        
         #find the direction of sampling to minimum
         if (x[np.argmin(y)] - x[np.argmin(y)-2])<0:
-            x_max_concave = min_x_range
+            x_max_inverted = min_x_range
         else:
-            x_max_concave = max_x_range
-        if (x_max_concave-x_min_concave)>8:
-            # if range is too big (>8 1/m^2), narrow it down on the larger side
-            x_min_concave = x_min_concave - 4        
-        x_fine_fit = np.linspace(x_min_concave, x_max_concave, num_points)
+            x_max_inverted = max_x_range
+        
+        if (x_max_inverted-x_min_inverted)>8:
+            # if range is too big, narrow it down on the larger side
+            x_min_inverted = x_min_inverted - 4
+            
+        x_fine_fit = np.linspace(x_min_inverted, x_max_inverted, num_points)
         
     elif (np.max(roots)-np.min(roots))>8:
         # need to concentrate around min!
@@ -262,24 +239,19 @@ def adapt_range(x, y, axis, fit_coefs=None, x_fit=None, energy=0.135, num_points
     else:
         x_fine_fit = np.linspace(roots[0], roots[1], num_points)
 
-    if return_range:
-        # if this function is called without initial scan
-        # return the new quad measurement range for this axis (in kG!!)
-        sign = -1 if axis=="y" else 1
-        return np.array([sign*get_quad_field(ele) for ele in x_fine_fit])
         
-    # GET NEW BEAMSIZES if returning new coefs to emit fn
+    # GET NEW BEAMSIZES 
     # this takes B in kG not K
     if axis=="x":
-        fine_fit_sizes = np.array([get_sizes(get_quad_field(ele))[0] for ele in x_fine_fit])
+        fine_fit_sizes = np.array([get_updated_beamsizes(get_quad_field(ele))[0] for ele in x_fine_fit])
     elif axis == "y":
-        fine_fit_sizes = np.array([get_sizes(-get_quad_field(ele))[1] for ele in x_fine_fit])
+        fine_fit_sizes = np.array([get_updated_beamsizes(-get_quad_field(ele))[1] for ele in x_fine_fit])
     
     # fit
     coefs = poly.polyfit(x_fine_fit, fine_fit_sizes**2, 2)
     xfit = np.linspace(np.min([min_x,np.min(x_fine_fit)]),np.max([max_x,np.max(x_fine_fit)]), 100)
     plot_fit(x_fine_fit, fine_fit_sizes, coefs, xfit, axis=axis, save_plot=save_plot, show_plots=show_plots)
-
+    
     return coefs
 
 def save_data(timestamp, nex, ney, bmx, bmy, xsizes, ysizes, kx, ky, adapted):
@@ -287,7 +259,7 @@ def save_data(timestamp, nex, ney, bmx, bmy, xsizes, ysizes, kx, ky, adapted):
     f.write(f"{timestamp},{nex},{ney},{bmx},{bmy},{xsizes},{ysizes},{kx},{ky},{adapted}\n")
     f.close()
     
-class ConcaveFitError(Exception):
+class InvertedFitError(Exception):
     """Raised when the adapted range emit 
-    fit results in concave polynomial"""
+    fit results in inverted polynomial"""
     pass
