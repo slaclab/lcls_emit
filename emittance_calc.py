@@ -1,14 +1,19 @@
-#import numpy.polynomial.polynomial as poly
 import datetime
 import numpy as np 
 import warnings
 import sys, os, errno
+from scipy.optimize import curve_fit
 # from beam_io import get_updated_beamsizes
 # get_sizes = get_updated_beamsizes
+#from beam_io_sim import get_sizes
 
 m_0 = 0.511*1e-3 # mass in [GeV]
 d = 2.26 # [m] distance between Q525 and OTR2
 l = 0.108 # effective length [m]
+
+def func(x, a, b, c):
+    """Polynomial function for emittance fit"""
+    return a*x**2 + b*x + c
 
 # function to create path to output if dir was not created before
 def mkdir_p(path):
@@ -35,12 +40,13 @@ def get_k1(g, p):
 def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_points=5, show_plots=False):
     """Fit sizes^2 = c0 + c1*k + c2*k^2
        returns: c0, c1, c2"""
-    if sizes_err is not None and sizes.all()>0:
-        sizes2_err = 2*sizes*np.array(sizes_err)
-        w = 1/sizes2_err 
+    if sizes_err is not None and sizes.all()>0 and sizes_err.all()>0:
+        w = 2*sizes*np.array(sizes_err) # sigma for poly fit
+        abs_sigma = True
     else:
         w = None
-    coefs, cov = np.polyfit(k, sizes**2, 2, w=w, cov=True) 
+        abs_sigma = False
+    coefs, cov = curve_fit(func, k, sizes**2, sigma=w, absolute_sigma=abs_sigma)
     
     if axis == 'x':
         min_k, max_k = np.min(k), np.max(k)
@@ -51,7 +57,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     
 
     # FOR DEBUGGING ONLY
-    plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)  
+    plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)  
     
     if adapt_ranges:
         try:
@@ -64,13 +70,13 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
                 save_data(timestamp,0,0,0,0,0,0,0,0,0,sizes,0,k,str(adapt_ranges))
 #         except NameError:
 #             print("Error: A function to get beamsizes is not defined. Returning original fit.")
-#             plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
+#             plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)
 #         except ValueError:
 #             print("Error: Cannot adapt quad ranges. Returning original fit.")
-#             plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)
+#             plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)
         except ConcaveFitError:
             print("Error: Cannot adapt quad ranges due to concave poly. Returning original fit.")
-            plot_fit(k, sizes, coefs, xfit, axis=axis, save_plot=True, show_plots=show_plots)     
+            plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)     
     else:
         plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)
   
@@ -166,8 +172,6 @@ def plot_fit(x, y, fit_coefs, x_fit, axis, yerr=None, save_plot=False, show_plot
     """Plot and save the emittance fits of size**2 vs k"""
     import matplotlib.pyplot as plt
     import datetime
-    if yerr is not None:
-        yerr = 1/yerr
     fig = plt.figure(figsize=(7,5))
     ffit = np.poly1d(fit_coefs)
     plt.errorbar(x, y**2, yerr=yerr, marker="x")
@@ -179,7 +183,7 @@ def plot_fit(x, y, fit_coefs, x_fit, axis, yerr=None, save_plot=False, show_plot
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     # DEBUGGING
-    save_plot=False
+#    save_plot=False
     if save_plot:
         try:
             plt.savefig(f"./plots/emittance_{axis}_fit_{timestamp}.png", dpi=100)
@@ -198,6 +202,11 @@ def get_quad_field(k, energy=0.135, l=0.108):
 def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, num_points=5, save_plot=False, show_plots=True):
     """Returns new scan quad values if called without initial fit coefs"""
     """Returns new coefs if called from fit_sigma with initial fit coefs"""
+    if w is None:
+        abs_sigma = False
+    else: 
+        abs_sigma = True
+
     if fit_coefs is None:
         return_range = True
         
@@ -211,7 +220,8 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
             k=-k
             min_k, max_k = np.min(k), np.max(k)
 
-        fit_coefs, fit_cov = np.polyfit(k, y**2, 2, w=w, cov=True) 
+        fit_coefs, fit_cov = curve_fit(func, k, y** 2, sigma=w, absolute_sigma=abs_sigma)
+
         x_fit = np.linspace(min_k, max_k, 100)
         x=k
     else:
@@ -295,12 +305,14 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
     # TODO: GET ERROR FROM BEAMSIZES
     if axis=="x":
         fine_fit_sizes = np.array([get_sizes(get_quad_field(ele))[0] for ele in x_fine_fit])
+        w = 2*fine_fit_sizes*(0.1*fine_fit_sizes) # TODO: GET BEAMSIZE ERRORS
     elif axis == "y":
         fine_fit_sizes = np.array([get_sizes(-get_quad_field(ele))[1] for ele in x_fine_fit])
+        w = 2*fine_fit_sizes*(0.1*fine_fit_sizes) # TODO: GET BEAMSIZE ERRORS
     # fit
-    coefs, cov = np.polyfit(x_fine_fit, fine_fit_sizes**2, 2, w=w, cov=True) 
+    coefs, cov = curve_fit(func, x_fine_fit, fine_fit_sizes** 2, sigma=w, absolute_sigma=abs_sigma)
     xfit = np.linspace(np.min(x_fine_fit),np.max(x_fine_fit), 100)
-    plot_fit(x_fine_fit, fine_fit_sizes, coefs, xfit, yerr=None, axis=axis,\
+    plot_fit(x_fine_fit, fine_fit_sizes, coefs, xfit, yerr=w, axis=axis,\
              save_plot=save_plot, show_plots=show_plots, title_suffix=" - adapted range")
     return coefs, cov
 
