@@ -29,9 +29,7 @@ class Image:
         self.yamp = None
         self.xamp_error = None
         self.yamp_error = None
-        
-        #self.low_intensity_flag = False
-        
+                
     def reshape_im(self, im = None):
         """Reshapes flattened OTR image to 2D array"""
         self.proc_image = self.flat_image.reshape(self.ncol,self.nrow)
@@ -70,9 +68,6 @@ class Image:
         para_x, para_error_x = self.dispatch(method, self.x_proj, para0=None, cut_area=cut_area, show_plots=show_plots)
         para_y, para_error_y = self.dispatch(method, self.y_proj, para0=None, cut_area=cut_area, show_plots=show_plots)
         
-#         if para_x[0]<=1500 or para_y[0]<=1500 :
-#             print(f"Low x peak amplitude: amp_x = {para_x[0]:.1f}, amp_y = {para_y[0]:.1f}.")
-#             self.low_intensity_flag = True
         self.xamp, self.yamp, self.xamp_error, self.yamp_error = \
         para_x[0],  para_y[0], para_error_x[0], para_error_y[0]
 
@@ -84,4 +79,4 @@ class Image:
         para_x[2],  para_y[2], para_error_x[2], para_error_y[2]
      
         
-        return self.xrms, self.yrms, self.xrms_error, self.yrms_error 
+        return self.xrms, self.yrms, self.xrms_error, self.yrms_error, self.xamp, self.yamp 

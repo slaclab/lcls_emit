@@ -79,7 +79,7 @@ def saveimage(im, ncol, nrow, beamsizes):
     bact = quad_act_pv.get()
     x_size = x_size_pv.get()
     y_size = y_size_pv.get()
-    f.write(f"{timestamp},{ncol},{nrow},{resolution},{bact},{x_size},{y_size},{beamsizes[0]},{beamsizes[1]}\n")
+    f.write(f"{timestamp},{ncol},{nrow},{xmin},{xmax},{ymin},{ymax},{resolution},{bact},{x_size},{y_size},{beamsizes[0]},{beamsizes[1]},{beamsizes[2]},{beamsizes[3]}\n")
     f.close()
     
 def getbeamsizes(avg_num_images=1):
@@ -104,17 +104,34 @@ def getbeamsizes(avg_num_images=1):
     # fit the profile and return the beamsizes
     beamsizes = beam_image.get_sizes(show_plots=False)
 
-    saveimage(im, ncol, nrow, beamsizes*resolution/1e-6) # pass beamsizes in um
+    saveimage(im, ncol, nrow, beamsizes[0:4]*resolution/1e-6) # pass beamsizes in um
     return beamsizes 
 
-def get_updated_beamsizes(quad):
-    """Get size should take a quad B field in kG and return [xrms, yrms] in meters"""
+def get_updated_beamsizes(quad, use_profMon=False):
+    """Get size should take a quad B field in kG and return 
+    [xrms, yrms, xrms_err, yrms_err] in meters"""
 #     setquad(quad)
 #     time.sleep(3)
-    beamsizes = np.array(getbeamsizes())[0:2]*resolution # convert to meters
-    xrms = beamsizes[0]
-    yrms = beamsizes[1]
-    return xrms, yrms
+    if use_profMon:
+        xrms, xrms_err = x_size_pv.get(), 0
+        yrms, yrms_err = y_size_pv.get(), 0
+    else:
+        beamsizes = np.array(getbeamsizes())
+        xrms = beamsizes[0]*resolution # convert to meters
+        yrms = beamsizes[1]*resolution # convert to meters
+        xrms_err = beamsizes[2]*resolution # convert to meters
+        yrms_err = beamsizes[3]*resolution # convert to meters
+        xamp = beamsizes[4]
+        yamp = beamsizes[5]
+        
+        if xamp<=amp_threshold or yamp<=amp_threshold:
+            print("Low beam intensity.")
+        if xrms<=min_sigma or yrms<=min_sigma:
+            print("Beam too small/Noisy image.")
+        if xrms>max_sigma or yrms>max_sigma:
+            print("Beam too large.")
+            
+    return xrms, yrms, xrms_err, yrms_err
 
 def mkdir_p(path):
     """Set up dirs for results in working dir"""

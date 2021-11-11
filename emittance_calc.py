@@ -2,10 +2,17 @@ import datetime
 import numpy as np 
 import warnings
 import sys, os, errno
+import scipy
 from scipy.optimize import curve_fit
-# from beam_io import get_updated_beamsizes
-# get_sizes = get_updated_beamsizes
-#from beam_io_sim import get_sizes
+# on sim 
+# from beam_io_sim import get_sizes
+# on lcls
+from beam_io import get_updated_beamsizes
+get_sizes = get_updated_beamsizes
+
+# do not display warnings when cov can't be computed
+# this will happen when len(y)<=3 and yerr=0
+warnings.simplefilter('ignore', scipy.optimize.OptimizeWarning)
 
 m_0 = 0.511*1e-3 # mass in [GeV]
 d = 2.26 # [m] distance between Q525 and OTR2
@@ -71,9 +78,9 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
 #         except NameError:
 #             print("Error: A function to get beamsizes is not defined. Returning original fit.")
 #             plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)
-#         except ValueError:
-#             print("Error: Cannot adapt quad ranges. Returning original fit.")
-#             plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)
+        except ComplexRootError:
+            print("Error: Cannot adapt quad ranges. Returning original fit.")
+            plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)
         except ConcaveFitError:
             print("Error: Cannot adapt quad ranges due to concave poly. Returning original fit.")
             plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)     
@@ -86,6 +93,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     coefs_err = np.sqrt(np.diag(cov))
     
     emit2 = (4*c0*c2 - c1**2) / l**2 / (4*d**4)
+    print(emit2)
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
@@ -183,7 +191,7 @@ def plot_fit(x, y, fit_coefs, x_fit, axis, yerr=None, save_plot=False, show_plot
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     # DEBUGGING
-#    save_plot=False
+    save_plot=False
     if save_plot:
         try:
             plt.savefig(f"./plots/emittance_{axis}_fit_{timestamp}.png", dpi=100)
@@ -244,7 +252,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
         concave_function = False
     
     # find range within 2-3x the focus size 
-    y_lim = np.min(np.polyval(fit_coefs, x_fit))*3
+    y_lim = np.min(np.polyval(fit_coefs, x_fit))*2
     if y_lim<0:
         print(f"{axis} axis: min. of poly fit is negative. Setting it to 0.")
         y_lim = np.mean(y**2)/5
@@ -252,7 +260,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
     # Flag bad fit with complex roots
     if np.iscomplex(roots).any():
         print("Cannot adapt quad ranges, complex root encountered.")
-        #raise ValueError("")
+        raise ComplexRootError
     
     # if roots are outside quad scanning range, set to scan range lim
     if np.min(roots)<min_x_range:
@@ -262,7 +270,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
     # have at least 3 scanning points within roots
     range_fit = np.max(roots)-np.min(roots)
     if range_fit<2:
-        # need at least 3 points for polynomial fit
+        # need at least 3 points for polynomial fit within a range to see beamsize changes
         x_fine_fit = np.linspace(np.min(roots)-1.5, np.max(roots)+1.5, num_points)
         
     if concave_function:
@@ -302,15 +310,26 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
         
     # GET NEW BEAMSIZES if returning new coefs to emit fn
     # this takes B in kG not K
-    # TODO: GET ERROR FROM BEAMSIZES
-    if axis=="x":
-        fine_fit_sizes = np.array([get_sizes(get_quad_field(ele))[0] for ele in x_fine_fit])
-        w = 2*fine_fit_sizes*(0.1*fine_fit_sizes) # TODO: GET BEAMSIZE ERRORS
-    elif axis == "y":
-        fine_fit_sizes = np.array([get_sizes(-get_quad_field(ele))[1] for ele in x_fine_fit])
-        w = 2*fine_fit_sizes*(0.1*fine_fit_sizes) # TODO: GET BEAMSIZE ERRORS
+    ax_idx_size = 1 if axis=="y" else 0
+    ax_idx_err = 3 if axis=="y" else 2
+    sign = -1 if axis=="y" else 1
+    
+    fine_fit_sizes, fine_fit_sizes_err = [], []
+    for ele in x_fine_fit:
+        beamsizes = get_sizes(sign*get_quad_field(ele))
+        fine_fit_sizes.append(beamsizes[ax_idx_size])
+        fine_fit_sizes_err.append(beamsizes[ax_idx_err])
+
+    fine_fit_sizes, fine_fit_sizes_err = np.array(fine_fit_sizes), np.array(fine_fit_sizes_err)
+    w = 2*fine_fit_sizes*fine_fit_sizes_err # since we are squaring the beamsize
+    
+    if w is None:
+        abs_sigma = False
+    else:
+        abs_sigma = True
+        
     # fit
-    coefs, cov = curve_fit(func, x_fine_fit, fine_fit_sizes** 2, sigma=w, absolute_sigma=abs_sigma)
+    coefs, cov = curve_fit(func, x_fine_fit, fine_fit_sizes**2, sigma=w, absolute_sigma=abs_sigma)
     xfit = np.linspace(np.min(x_fine_fit),np.max(x_fine_fit), 100)
     plot_fit(x_fine_fit, fine_fit_sizes, coefs, xfit, yerr=w, axis=axis,\
              save_plot=save_plot, show_plots=show_plots, title_suffix=" - adapted range")
@@ -324,4 +343,9 @@ def save_data(timestamp, nex, ney, bmx, bmy, nex_err, ney_err, bmx_err, bmy_err,
 class ConcaveFitError(Exception):
     """Raised when the adapted range emit 
     fit results in concave polynomial"""
+    pass
+
+class ComplexRootError(Exception):
+    """Raised when the adapted range emit 
+    fit results in polynomial with complex root(s)"""
     pass

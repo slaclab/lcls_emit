@@ -23,14 +23,14 @@ def fit_gaussian_linear_background(y, para0 = None, show_plots=False, cut_area =
         mu0 = x[np.argwhere(y==y.max())][0].item() # get the first element if more than two 
         sigma0 = 5
         slope0 = 0
-        para0 = [amp0, mu0, sigma0, slope0, offset0]
+        para0 = np.array([amp0, mu0, sigma0, slope0, offset0])
 
     try:
         para, para_error = curve_fit(gaussian_linear_background, x, y, p0 = para0)
     except:
         print("Fitting failed, taking initial guess.")
         para = para0 
-        para_error = [0]*len(para0)
+        para_error = np.array([0]*len(para0))
 
     para[2] = abs(para[2])  # Gaussian width is postivie definite
     # contraints on the output fit parameters
@@ -47,7 +47,7 @@ def fit_gaussian_linear_background(y, para0 = None, show_plots=False, cut_area =
 
     # taking relevant parameters
     para_vals = para[0:3]
-    if np.any(para_error<0):
+    if np.any(np.diag(para_error)<0) or np.any(np.diag(para_error)==0):
         para_err_vals = [0]*len(para_vals)
     else:
         para_err_vals = np.sqrt(np.diag(para_error))[0:3] 
