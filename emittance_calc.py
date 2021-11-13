@@ -47,6 +47,7 @@ def get_k1(g, p):
 def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_points=5, show_plots=False):
     """Fit sizes^2 = c0 + c1*k + c2*k^2
        returns: c0, c1, c2"""
+    sizes = np.array(sizes)
     if len(sizes)<3:
         print("Less than 3 data points were passed.")
         return np.nan, np.nan, np.nan, np.nan
@@ -68,7 +69,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     
 
     # FOR DEBUGGING ONLY
-    plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=False, show_plots=show_plots)  
+    #plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=False, show_plots=show_plots)  
     
     if adapt_ranges:
         try:
@@ -323,7 +324,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
         fine_fit_sizes_err.append(beamsizes[ax_idx_err])
 
     fine_fit_sizes, fine_fit_sizes_err = np.array(fine_fit_sizes), np.array(fine_fit_sizes_err)
-    w = 2*fine_fit_sizes*fine_fit_sizes_err # since we are squaring the beamsize
+    w = None#2*fine_fit_sizes*fine_fit_sizes_err # since we are squaring the beamsize
     
     if w is None:
         abs_sigma = False

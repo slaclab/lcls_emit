@@ -15,20 +15,20 @@ from image import Image
 # SET UP AT BEGINNING OF SHIFT 
 ##################################
 # ROI: y is col, x is row
-use_roi = False
-ymin = 200
-ymax = 900
-xmin = 1000
+use_roi = True
+ymin = 100
+ymax = 350
+xmin = 200
 xmax = -1
+
+# OTR2 resolution: MD update 10/22
+resolution = 12.23*1e-6 # in meters for emittance calc
 
 # Bad beam amp and sigma limits
 # TODO: convert these to um for more intuitive setup?
 amp_threshold = 1500 
-min_sigma = 1.5 # noise
-max_sigma = 25  # large/diffuse beam
-
-# OTR2 resolution: MD update 10/22
-resolution = 12.23*1e-6 # in meters for emittance calc
+min_sigma = 1.5*resolution # noise
+max_sigma = 25*resolution  # large/diffuse beam
 
 # bg image subtraction
 subtract_bg = False
@@ -123,6 +123,7 @@ def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False):
     [xrms, yrms, xrms_err, yrms_err] in meters"""
     setquad(quad)
     time.sleep(3)
+    #use_profMon=True
     if use_profMon:
         xrms, xrms_err = x_size_pv.get()*1e-6, 0 # in meters
         yrms, yrms_err = y_size_pv.get()*1e-6, 0 # in meters
@@ -134,6 +135,8 @@ def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False):
         yrms_err = beamsizes[3]*resolution # convert to meters
         xamp = beamsizes[4]
         yamp = beamsizes[5]
+        
+        #print(xrms, yrms, xamp, yamp)
         
         if xamp<=amp_threshold or yamp<=amp_threshold:
             print("Low beam intensity.")
