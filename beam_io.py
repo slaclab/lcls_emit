@@ -4,10 +4,6 @@ import sys, os, errno
 import json
 import time
 import datetime
-import scipy.io
-import scipy.ndimage as snd
-from scipy.stats import moment
-from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 try:
     from epics import caget, caput, PV
@@ -19,7 +15,7 @@ from image import Image
 # SET UP AT BEGINNING OF SHIFT 
 ##################################
 # ROI: y is col, x is row
-use_roi = True
+use_roi = False
 ymin = 200
 ymax = 900
 xmin = 1000
@@ -49,10 +45,14 @@ n_col_pv =  PV("OTRS:IN20:571:ROI_YNP")
 n_row_pv =  PV("OTRS:IN20:571:ROI_XNP")
 
 meas_input_pv =  PV(pv_info['device']['QUAD']['Q525'])
-quad_act_pv =  PV("QUAD:IN20:525:BACT")
 varx_pv =  PV(pv_info['device']['SOL']['SOL121'])
 vary_pv =  PV(pv_info['device']['QUAD']['Q121'])
 varz_pv =  PV(pv_info['device']['QUAD']['Q122'])
+
+varx_act_pv =  PV("SOLN:IN20:121:BACT")
+vary_act_pv =  PV("QUAD:IN20:121:BACT")
+varz_act_pv =  PV("QUAD:IN20:122:BACT")
+quad_act_pv =  PV("QUAD:IN20:525:BACT")
 
 x_size_pv = PV(pv_info['device']['OTR2']['profmonxsize'])
 y_size_pv = PV(pv_info['device']['OTR2']['profmonysize'])
@@ -63,6 +63,18 @@ energy = caget(pv_info['energy']['DL1'])
 #resolution = caget(pv_info['device']['OTR2']['resolution'])*1e-6 # in meters for emittance calc
 
 ## I/O FUNCTIONS
+def get_beamsize_inj(varx=varx_pv.get(), vary=vary_pv.get(), varz=varz_pv.get(), quad=meas_input_pv.get(), use_profMon=False):
+    """Get beamsize fn that changes upstream cu injector
+    and returns xrms and yrms in [m]"""
+    setinjector(varx,vary,varz)
+    beamsize = get_updated_beamsizes(quad, use_profMon=use_profMon)
+    return np.array([beamsize[0], beamsize[1]])
+
+def setinjector(varx, vary, varz):
+    varx_pv.put(varx)
+    vary_pv.put(vary)
+    varz_pv.put(vary)
+    
 def setquad(value):
     """Sets Q525 to new scan value"""
     meas_input_pv.put(value)
@@ -93,28 +105,27 @@ def getbeamsizes(avg_num_images=1):
         
     ncol, nrow = n_col_pv.get(), n_row_pv.get()
     
-    beam_image = Image(im, ncol, nrow, bg_image = bg_image)
+    beam_image = Image(im, ncol, nrow, bg_image = bg_im)
     beam_image.reshape_im()
     if subtract_bg:
         beam_image.subtract_bg()
     if use_roi:
         beam_image.proc_image = beam_image.proc_image[ymin:ymax, xmin:xmax]
     beam_image.get_im_projection()
-    
     # fit the profile and return the beamsizes
     beamsizes = beam_image.get_sizes(show_plots=False)
-
-    saveimage(im, ncol, nrow, beamsizes[0:4]*resolution/1e-6) # pass beamsizes in um
+    save_beam = list(np.array(beamsizes[0:4])*resolution/1e-6)
+    saveimage(im, ncol, nrow, beamsizes) # pass beamsizes in um
     return beamsizes 
 
-def get_updated_beamsizes(quad, use_profMon=False):
+def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False):
     """Get size should take a quad B field in kG and return 
     [xrms, yrms, xrms_err, yrms_err] in meters"""
-#     setquad(quad)
-#     time.sleep(3)
+    setquad(quad)
+    time.sleep(3)
     if use_profMon:
-        xrms, xrms_err = x_size_pv.get(), 0
-        yrms, yrms_err = y_size_pv.get(), 0
+        xrms, xrms_err = x_size_pv.get()*1e-6, 0 # in meters
+        yrms, yrms_err = y_size_pv.get()*1e-6, 0 # in meters
     else:
         beamsizes = np.array(getbeamsizes())
         xrms = beamsizes[0]*resolution # convert to meters
@@ -126,11 +137,22 @@ def get_updated_beamsizes(quad, use_profMon=False):
         
         if xamp<=amp_threshold or yamp<=amp_threshold:
             print("Low beam intensity.")
+            case = "low"
         if xrms<=min_sigma or yrms<=min_sigma:
             print("Beam too small/Noisy image.")
+            case = "small"
         if xrms>max_sigma or yrms>max_sigma:
             print("Beam too large.")
-            
+        
+    timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
+    f= open(f"beamsize_config_info.csv", "a+")
+    varx_cur = varx_act_pv.get()
+    vary_cur = vary_act_pv.get()
+    varz_cur = varz_act_pv.get()
+    bact_cur = quad_act_pv.get()
+    f.write(f"{timestamp},{varx_cur},{vary_cur},{varz_cur},{bact_cur},{xrms},{yrms},{xrms_err},{yrms_err}\n")
+    f.close()
+    
     return xrms, yrms, xrms_err, yrms_err
 
 def mkdir_p(path):

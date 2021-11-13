@@ -47,6 +47,10 @@ def get_k1(g, p):
 def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_points=5, show_plots=False):
     """Fit sizes^2 = c0 + c1*k + c2*k^2
        returns: c0, c1, c2"""
+    if len(sizes)<3:
+        print("Less than 3 data points were passed.")
+        return np.nan, np.nan, np.nan, np.nan
+    
     if sizes_err is not None and sizes.all()>0 and sizes_err.all()>0:
         w = 2*sizes*np.array(sizes_err) # sigma for poly fit
         abs_sigma = True
@@ -64,7 +68,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     
 
     # FOR DEBUGGING ONLY
-    plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)  
+    plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=False, show_plots=show_plots)  
     
     if adapt_ranges:
         try:
@@ -93,7 +97,6 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     coefs_err = np.sqrt(np.diag(cov))
     
     emit2 = (4*c0*c2 - c1**2) / l**2 / (4*d**4)
-    print(emit2)
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
@@ -191,7 +194,6 @@ def plot_fit(x, y, fit_coefs, x_fit, axis, yerr=None, save_plot=False, show_plot
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     # DEBUGGING
-    save_plot=False
     if save_plot:
         try:
             plt.savefig(f"./plots/emittance_{axis}_fit_{timestamp}.png", dpi=100)
