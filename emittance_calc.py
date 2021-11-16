@@ -121,30 +121,18 @@ def get_bmag(coefs, coefs_err, emit, emit_err, axis):
     
     sig11 = c2 / (d*l)**2
     sig12 = (-c1 - 2*d*l*sig11) / (2*d**2*l)
-#     sig12 = c1/4/l**2/d**4
     sig22 = (c0 - sig11 - 2*d*sig12) / d**2
-#     sig22 = c0/d**2
     
     emit0 = twiss0[0] if axis == 'x' else twiss0[1] if axis == 'y' else 0
     beta0 = twiss0[2] if axis == 'x' else twiss0[3] if axis == 'y' else 0
     alpha0 = twiss0[4] if axis == 'x' else twiss0[5] if axis == 'y' else 0
     gamma0 = (1+alpha0**2)/beta0
-    
-    # test
-#     sig11 = emit0*beta0/264
-#     sig12 = -emit0*alpha0/264
-#     sig22 = emit0*gamma0/264
 
     # using unnormalized calculated emittance
     beta = sig11/emit
     alpha = -sig12/emit
     gamma = sig22/emit
     
-    # test
-#     beta = sig11/emit0*264
-#     alpha = -sig12/emit0*264
-#     gamma = sig22/emit0*264
-
     bmag = 0.5 * (beta*gamma0 - 2*alpha*alpha0 + gamma*beta0)
     
     # ignoring correlations
@@ -160,8 +148,8 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
 
-    kx = xrange #get_k1(get_gradient(xrange), beta*energy)
-    ky = yrange #get_k1(get_gradient(yrange), beta*energy)
+    kx = get_k1(get_gradient(xrange), beta*energy)
+    ky = get_k1(get_gradient(yrange), beta*energy)
     
     emitx, emitx_err, coefsx, coefsx_err = fit_sigma(np.array(xrms), kx, axis='x', sizes_err=xrms_err,\
                                        adapt_ranges=adapt_ranges, num_points=num_points, show_plots=show_plots)
