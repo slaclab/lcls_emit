@@ -7,8 +7,8 @@ from scipy.optimize import curve_fit
 # on sim 
 # from beam_io_sim import get_sizes
 # on lcls
-from beam_io import get_updated_beamsizes
-get_sizes = get_updated_beamsizes
+# from beam_io import get_updated_beamsizes
+# get_sizes = get_updated_beamsizes
 
 # do not display warnings when cov can't be computed
 # this will happen when len(y)<=3 and yerr=0
@@ -69,7 +69,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     
 
     # FOR DEBUGGING ONLY
-    #plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=False, show_plots=show_plots)  
+    #plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=False, show_plots=show_plots)  
     
     if adapt_ranges:
         try:
@@ -82,15 +82,15 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
                 save_data(timestamp,0,0,0,0,0,0,0,0,0,sizes,0,k,str(adapt_ranges))
 #         except NameError:
 #             print("Error: A function to get beamsizes is not defined. Returning original fit.")
-#             plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)
+#             plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)
         except ComplexRootError:
             print("Error: Cannot adapt quad ranges. Returning original fit.")
-            plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)
+            plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)
         except ConcaveFitError:
             print("Error: Cannot adapt quad ranges due to concave poly. Returning original fit.")
-            plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)     
+            plot_fit(k, sizes, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)     
     else:
-        plot_fit(k, sizes, coefs, xfit, yerr=w, axis=axis, save_plot=True, show_plots=show_plots)
+        plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)
   
     # poly.poly: return c0,c1,c2
     # np.polyfit: highest power first
@@ -183,17 +183,32 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     
     return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err
 
-def plot_fit(x, y, fit_coefs, x_fit, axis, yerr=None, save_plot=False, show_plots=False, title_suffix=""):
+def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, title_suffix=""):
     """Plot and save the emittance fits of size**2 vs k"""
     import matplotlib.pyplot as plt
-    import datetime
     fig = plt.figure(figsize=(7,5))
-    ffit = np.poly1d(fit_coefs)
-    plt.errorbar(x, y**2, yerr=yerr, marker="x")
-    plt.plot(x_fit, np.polyval(fit_coefs, x_fit))
+    
+    # plot x-axis in kG and sizes in um
+    sign = -1 if axis=="y" else 1
+    x = sign*get_quad_field(x)
+    x_fit_gauss = sign*get_quad_field(x_fit)
+    
+    if yerr is not None:
+        abs_sigma = True
+        yerr_plot = np.array(yerr/1e-6) # for plotting
+    else: 
+        abs_sigma = False
+        yerr_plot = None
         
-    plt.xlabel(r"k (1/m$^2$)")
-    plt.ylabel(r"sizes$^2$ (m$^2$)")
+    # fit just for plotting
+    coefs, cov = curve_fit(func, x, y, sigma=yerr, absolute_sigma=abs_sigma)
+    y_fit = np.array(np.polyval(coefs, x_fit_gauss))
+
+    plt.errorbar(x, y/1e-6, yerr=yerr_plot, marker="x")
+    plt.plot(x_fit_gauss, y_fit/1e-6)
+        
+    plt.xlabel(r"B (kG)")
+    plt.ylabel(r"sizes ($\mu$m)")
     plt.title(f"{axis}-axis "+title_suffix)
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
@@ -337,7 +352,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
     # fit
     coefs, cov = curve_fit(func, x_fine_fit, fine_fit_sizes**2, sigma=w, absolute_sigma=abs_sigma)
     xfit = np.linspace(np.min(x_fine_fit),np.max(x_fine_fit), 100)
-    plot_fit(x_fine_fit, fine_fit_sizes, coefs, xfit, yerr=w, axis=axis,\
+    plot_fit(x_fine_fit, fine_fit_sizes, xfit, yerr=fine_fit_sizes_err, axis=axis,\
              save_plot=save_plot, show_plots=show_plots, title_suffix=" - adapted range")
     return coefs, cov
 
