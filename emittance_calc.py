@@ -7,8 +7,8 @@ from scipy.optimize import curve_fit
 # on sim 
 # from beam_io_sim import get_sizes
 # on lcls
-# from beam_io import get_updated_beamsizes
-# get_sizes = get_updated_beamsizes
+from beam_io import get_updated_beamsizes
+get_sizes = get_updated_beamsizes
 
 # do not display warnings when cov can't be computed
 # this will happen when len(y)<=3 and yerr=0
@@ -123,16 +123,14 @@ def get_bmag(coefs, coefs_err, emit, emit_err, axis):
     sig12 = (-c1 - 2*d*l*sig11) / (2*d**2*l)
     sig22 = (c0 - sig11 - 2*d*sig12) / d**2
     
-    emit0 = twiss0[0] if axis == 'x' else twiss0[1] if axis == 'y' else 0
-    beta0 = twiss0[2] if axis == 'x' else twiss0[3] if axis == 'y' else 0
+    beta0 =  twiss0[2] if axis == 'x' else twiss0[3] if axis == 'y' else 0
     alpha0 = twiss0[4] if axis == 'x' else twiss0[5] if axis == 'y' else 0
     gamma0 = (1+alpha0**2)/beta0
 
-    # using unnormalized calculated emittance
     beta = sig11/emit
     alpha = -sig12/emit
     gamma = sig22/emit
-    
+
     bmag = 0.5 * (beta*gamma0 - 2*alpha*alpha0 + gamma*beta0)
     
     # ignoring correlations
@@ -143,7 +141,10 @@ def get_bmag(coefs, coefs_err, emit, emit_err, axis):
 def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=None,\
                  adapt_ranges=False, num_points=5, show_plots=False):
     """Returns normalized emittance [m]
-       given quad values and beamsizes"""    
+       given quad values and beamsizes""" 
+    if np.isnan(xrms).any() or np.isnan(yrms).any():
+        return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
+    
     mkdir_p("plots")
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)

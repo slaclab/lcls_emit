@@ -15,7 +15,7 @@ from image import Image
 # SET UP AT BEGINNING OF SHIFT 
 ##################################
 # ROI: y is col, x is row
-use_roi = True
+use_roi = False
 ymin = 100
 ymax = 350
 xmin = 200
@@ -94,7 +94,7 @@ def saveimage(im, ncol, nrow, beamsizes):
     f.write(f"{timestamp},{ncol},{nrow},{xmin},{xmax},{ymin},{ymax},{resolution},{bact},{x_size},{y_size},{beamsizes[0]},{beamsizes[1]},{beamsizes[2]},{beamsizes[3]}\n")
     f.close()
     
-def getbeamsizes(avg_num_images=1):
+def getbeamsizes(avg_num_images=3):
     """Returns xrms, yrms, xrms_err, yrms_err"""
     im = im_pv.get()
     # average multiple images to obtain final image
@@ -135,15 +135,10 @@ def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False):
         yrms_err = beamsizes[3]*resolution # convert to meters
         xamp = beamsizes[4]
         yamp = beamsizes[5]
-        
-        #print(xrms, yrms, xamp, yamp)
-        
-        if xamp<=amp_threshold or yamp<=amp_threshold:
-            print("Low beam intensity.")
-            case = "low"
-        if xrms<=min_sigma or yrms<=min_sigma:
-            print("Beam too small/Noisy image.")
-            case = "small"
+               
+        if xamp<=amp_threshold or yamp<=amp_threshold or xrms<=min_sigma or yrms<=min_sigma:
+            print("Low beam intensity or beam too small/noisy image.")
+            
         if xrms>max_sigma or yrms>max_sigma:
             print("Beam too large.")
         
