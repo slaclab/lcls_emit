@@ -7,8 +7,8 @@ from scipy.optimize import curve_fit
 # on sim 
 #from beam_io_sim import get_sizes
 # on lcls
-# from beam_io import get_updated_beamsizes
-#get_sizes = get_updated_beamsizes
+from beam_io import get_updated_beamsizes
+get_sizes = get_updated_beamsizes
 
 # do not display warnings when cov can't be computed
 # this will happen when len(y)<=3 and yerr=0

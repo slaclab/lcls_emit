@@ -67,7 +67,7 @@ energy = caget(pv_info['energy']['DL1'])
 def get_beamsize_inj(varx=varx_pv.get(), vary=vary_pv.get(), varz=varz_pv.get(), quad=meas_input_pv.get(), use_profMon=False):
     """Get beamsize fn that changes upstream cu injector
     and returns xrms and yrms in [m]"""
-    setinjector(varx,vary,varz)
+    #setinjector(varx,vary,varz)
     beamsize = get_updated_beamsizes(quad, use_profMon=use_profMon)
     return np.array([beamsize[0], beamsize[1]])
 
@@ -97,66 +97,76 @@ def saveimage(im, ncol, nrow, beamsizes):
     
 def getbeamsizes(avg_num_images=3):
     """Returns xrms, yrms, xrms_err, yrms_err"""
-    if avg_num_images>1:
-        return average_ims(num_images = avg_num_images)
-    else:
-        im = im_pv.get()
-        # average multiple images to obtain final image
-    #     if avg_num_images>1:
-    #         for i in range(avg_num_images):
-    #             im_tmp = im_pv.get()
-    #             im = np.mean(np.array([ im,im_tmp ]), axis=0 )
-
-        ncol, nrow = n_col_pv.get(), n_row_pv.get()
-
-        beam_image = Image(im, ncol, nrow, bg_image = bg_im)
-        beam_image.reshape_im()
-        if subtract_bg:
-            beam_image.subtract_bg()
-        if use_roi:
-            beam_image.proc_image = beam_image.proc_image[ymin:ymax, xmin:xmax]
-
-        beam_image.get_im_projection()
-        # fit the profile and return the beamsizes
-        beamsizes = beam_image.get_sizes(show_plots=False)
-        save_beam = list(np.array(beamsizes[0:4])*resolution/1e-6)
-        saveimage(im, ncol, nrow, beamsizes) # pass beamsizes in um
-        return beamsizes 
+#     if avg_num_images>1:
+#         return average_ims(num_images = avg_num_images)
+    beamsizes = average_ims(num_images = avg_num_images)
+    return beamsizes 
 
 def average_ims(num_images):
     xrms, yrms, xrms_err, yrms_err, xamp, yamp = [0]*num_images, [0]*num_images, [0]*num_images, \
     [0]*num_images, [0]*num_images, [0]*num_images
     
-    for i in num_images:
+    for i in range(0,num_images):
         repeat = True
         count = 0
         # retake bad images 3 times
         while repeat:
-            xrms[i], yrms[i], xrms_err[i], yrms_err[i], xamp[i], yamp[i] = getbeamsizes(avg_num_image=1)
-            count = count + 1
-            if (xamp[i]>amp_threshold and yamp[i]>amp_threshold and xrms[i]>min_sigma and yrms[i]>min_sigma and xrms[i]<max_sigma or yrms[i]<max_sigma) or (count==3):
+            xrms[i], yrms[i], xrms_err[i], yrms_err[i], xamp[i], yamp[i] = get_beam_image()
+            time.sleep(0.5)
+            count = count + 1           
+
+            if xamp[i]>amp_threshold and yamp[i]>amp_threshold and xrms[i]>min_sigma and yrms[i]>min_sigma and xrms[i]<max_sigma and yrms[i]<max_sigma:
+                # if conditions are met, stop resampling this image
                 repeat = False
-                xrms[i], yrms[i], xrms_err[i], yrms_err[i], xamp[i], yamp[i] = 0,0,0,0,0,0
-                
+            elif count==3:
+                # if still bad after 3 tries, return 0
+                xrms[i], yrms[i], xrms_err[i], yrms_err[i], xamp[i], yamp[i] = np.nan,np.nan,np.nan,np.nan,np.nan,np.nan
+                repeat = False
+       
     # only take ims w/ non-zero beam properties
-    idx = [~(xrms==0)]
+    idx = ~np.isnan(xrms)
+    if True not in idx:
+        return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     
-    mean_xrms = np.mean(xrms[idx])
-    mean_yrms = np.mean(yrms[idx])
-    mean_xrms_err = np.std(xrms[idx])/num_images
-    mean_yrms_err = np.std(yrms[idx])/num_images
-#     mean_xrms_err = np.sqrt(np.mean(np.array(xrms_err[idx])**2))
-#     mean_yrms_err = np.sqrt(np.mean(np.array(yrms_err[idx])**2))
-    mean_xamp = np.mean(xamp[idx])
-    mean_yamp = np.mean(yamp[idx])        
+    mean_xrms = np.mean(np.array(xrms)[idx])
+    mean_yrms = np.mean(np.array(yrms)[idx])
+    mean_xrms_err = np.std(np.array(xrms)[idx])/num_images
+    mean_yrms_err = np.std(np.array(yrms)[idx])/num_images
+#     mean_xrms_err = np.sqrt(np.mean(np.array(xrms_err)[idx]**2))
+#     mean_yrms_err = np.sqrt(np.mean(np.array(yrms_err)[idx]**2))
+    mean_xamp = np.mean(np.array(xamp)[idx])
+    mean_yamp = np.mean(np.array(yamp)[idx]) 
+    return mean_xrms, mean_yrms, mean_xrms_err, mean_yrms_err, mean_xamp, mean_yamp
 
-    return mean_xrms, mean_yrms, mean_xrms_error, mean_yrms_error, mean_xamp, mean_yamp
+def get_beam_image():
+    """Get beam image from screen and return beamsize info"""
+    im = im_pv.get()
+    # average multiple images to obtain final image
+#     if avg_num_images>1:
+#         for i in range(avg_num_images):
+#             im_tmp = im_pv.get()
+#             im = np.mean(np.array([ im,im_tmp ]), axis=0 )
+    ncol, nrow = n_col_pv.get(), n_row_pv.get()
+    
+    beam_image = Image(im, ncol, nrow, bg_image = bg_im)
+    beam_image.reshape_im()
+    if subtract_bg:
+        beam_image.subtract_bg()
+    if use_roi:
+        beam_image.proc_image = beam_image.proc_image[ymin:ymax, xmin:xmax]
+    beam_image.get_im_projection()
+    
+    # fit the profile and return the beamsizes
+    beamsizes = beam_image.get_sizes(show_plots=False)
+    save_beam = list(np.array(beamsizes[0:4])*resolution/1e-6)
+    saveimage(im, ncol, nrow, beamsizes) # pass beamsizes in um
+    return beamsizes
 
-def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False, reject_bad_beam=True, sample_num=0):
+def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False, reject_bad_beam=True):
     """Get size should take a quad B field in kG and return 
     [xrms, yrms, xrms_err, yrms_err] in meters"""
-    setquad(quad)
-    time.sleep(3)
+#     setquad(quad)
+#     time.sleep(3)
     
     #use_profMon=True
     if use_profMon:
@@ -164,28 +174,39 @@ def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False, reject_bad_
         yrms, yrms_err = y_size_pv.get()*1e-6, 0 # in meters
     else:
         beamsizes = np.array(getbeamsizes())
-        
+
         xrms = beamsizes[0]
         yrms = beamsizes[1]
+        xrms_err = beamsizes[2]
+        yrms_err = beamsizes[3]
         xamp = beamsizes[4]
         yamp = beamsizes[5]        
-       
-        if xamp<=amp_threshold or yamp<=amp_threshold or xrms<=min_sigma or yrms<=min_sigma or xrms>max_sigma or yrms>max_sigma:
-            # TODO: switch to using the area under the gaussian (should be prop to charge)
-            print("Low beam intensity/noisy or beam too small/large.")
-            if reject_bad_beam:
-                if sample_num>max_samples:
+
+        if reject_bad_beam:
+            count = 0
+            while xamp<=amp_threshold or yamp<=amp_threshold or xrms<=min_sigma or yrms<=min_sigma or xrms>max_sigma or yrms>max_sigma:
+                if count == 3:
+                    # resample beamsize only 3 times
                     return np.nan, np.nan, np.nan, np.nan
+                # TODO: switch to using the area under the gaussian (should be prop to charge)
+                print("Low beam intensity/noisy or beam too small/large.")
                 print("Waiting 5 sec and repeating measurement...")
                 time.sleep(5)
-                get_updated_beamsizes(quad, use_profMon, reject_bad_beam, sample_num+1)
+                beamsizes = np.array(getbeamsizes())
+                xrms = beamsizes[0]
+                yrms = beamsizes[1]
+                xrms_err = beamsizes[2]
+                yrms_err = beamsizes[3]
+                xamp = beamsizes[4]
+                yamp = beamsizes[5] 
                 
-        else:
-            # convert to meters
-            xrms = xrms*resolution 
-            yrms = xrms*resolution 
-            xrms_err = beamsizes[2]*resolution
-            yrms_err = beamsizes[3]*resolution 
+                count = count + 1
+
+        # convert to meters
+        xrms = xrms*resolution 
+        yrms = yrms*resolution 
+        xrms_err = xrms_err*resolution
+        yrms_err = yrms_err*resolution 
 
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     f= open(f"beamsize_config_info.csv", "a+")
@@ -195,8 +216,8 @@ def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False, reject_bad_
     bact_cur = quad_act_pv.get()
     f.write(f"{timestamp},{varx_cur},{vary_cur},{varz_cur},{bact_cur},{xrms},{yrms},{xrms_err},{yrms_err}\n")
     f.close()
-
     return xrms, yrms, xrms_err, yrms_err
+
 
 def mkdir_p(path):
     """Set up dirs for results in working dir"""
@@ -207,4 +228,3 @@ def mkdir_p(path):
             pass
         else:
             raise
- 
