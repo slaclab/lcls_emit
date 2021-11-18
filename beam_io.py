@@ -28,7 +28,7 @@ resolution = 12.23*1e-6 # in meters for emittance calc
 # TODO: convert these to um for more intuitive setup?
 amp_threshold = 1500 
 min_sigma = 1.5 # noise
-max_sigma = 50 # large/diffuse beam
+max_sigma = 40 # large/diffuse beam
 max_samples = 3 # how many times to sample bad beam
 
 # bg image subtraction
@@ -165,8 +165,8 @@ def get_beam_image():
 def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False, reject_bad_beam=True):
     """Get size should take a quad B field in kG and return 
     [xrms, yrms, xrms_err, yrms_err] in meters"""
-#     setquad(quad)
-#     time.sleep(3)
+    #setquad(quad)
+    time.sleep(3)
     
     #use_profMon=True
     if use_profMon:
@@ -174,6 +174,7 @@ def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False, reject_bad_
         yrms, yrms_err = y_size_pv.get()*1e-6, 0 # in meters
     else:
         beamsizes = np.array(getbeamsizes())
+        #print(beamsizes)
 
         xrms = beamsizes[0]
         yrms = beamsizes[1]
@@ -184,7 +185,8 @@ def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False, reject_bad_
 
         if reject_bad_beam:
             count = 0
-            while xamp<=amp_threshold or yamp<=amp_threshold or xrms<=min_sigma or yrms<=min_sigma or xrms>max_sigma or yrms>max_sigma:
+            while xamp<=amp_threshold or yamp<=amp_threshold or xrms<=min_sigma or yrms<=min_sigma or xrms>max_sigma or yrms>max_sigma or np.isnan(beamsizes).any():
+               
                 if count == 3:
                     # resample beamsize only 3 times
                     return np.nan, np.nan, np.nan, np.nan

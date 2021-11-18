@@ -130,12 +130,10 @@ def get_bmag(coefs, coefs_err, emit, emit_err, axis):
     alpha0 = twiss0[4] if axis == 'x' else twiss0[5] if axis == 'y' else 0
     gamma0 = (1+alpha0**2)/beta0
 
-    beta = sig11/emit/np.pi
-    alpha = -sig12/emit/np.pi
-    gamma = sig22/emit/np.pi
-
-    if axis=="x": alpha = alpha*(-1)
-    
+    beta = sig11/emit
+    alpha = -sig12/emit
+    gamma = sig22/emit
+        
     bmag = 0.5 * (beta*gamma0 - 2*alpha*alpha0 + gamma*beta0)
     
     # ignoring correlations
@@ -351,7 +349,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
         fine_fit_sizes = np.array(fine_fit_sizes)[not_nan_array]
         fine_fit_sizes_err = np.array(fine_fit_sizes_err)[not_nan_array]
         x_fine_fit = np.array(x_fine_fit)[not_nan_array]
-        if len(fine_fit_sizes)<3:
+        if (len(fine_fit_sizes)<3) or (True not in not_nan_array):
             return np.nan, np.nan
 
     fine_fit_sizes, fine_fit_sizes_err = np.array(fine_fit_sizes), np.array(fine_fit_sizes_err)
