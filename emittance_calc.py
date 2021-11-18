@@ -5,10 +5,10 @@ import sys, os, errno
 import scipy
 from scipy.optimize import curve_fit
 # on sim 
-# from beam_io_sim import get_sizes
+#from beam_io_sim import get_sizes
 # on lcls
 # from beam_io import get_updated_beamsizes
-# get_sizes = get_updated_beamsizes
+#get_sizes = get_updated_beamsizes
 
 # do not display warnings when cov can't be computed
 # this will happen when len(y)<=3 and yerr=0
@@ -92,6 +92,9 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     else:
         plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)
   
+    if np.isnan(coefs).any() or np.isnan(cov).any():
+        return np.nan, np.nan, np.nan, np.nan 
+        
     # poly.poly: return c0,c1,c2
     # np.polyfit: highest power first
     c2, c1, c0 = coefs
@@ -127,14 +130,16 @@ def get_bmag(coefs, coefs_err, emit, emit_err, axis):
     alpha0 = twiss0[4] if axis == 'x' else twiss0[5] if axis == 'y' else 0
     gamma0 = (1+alpha0**2)/beta0
 
-    beta = sig11/emit
-    alpha = -sig12/emit
-    gamma = sig22/emit
+    beta = sig11/emit/np.pi
+    alpha = -sig12/emit/np.pi
+    gamma = sig22/emit/np.pi
 
+    if axis=="x": alpha = alpha*(-1)
+    
     bmag = 0.5 * (beta*gamma0 - 2*alpha*alpha0 + gamma*beta0)
     
     # ignoring correlations
-    # TODO: double check error for bmag
+    # TODO: check error propagation for bmag
     bmag_err = bmag * np.sqrt((c2_err/c2)**2 + (c1_err/c1)**2 + (c0_err/c0)**2)
     return bmag, bmag_err
 
@@ -340,6 +345,14 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
         beamsizes = get_sizes(sign*get_quad_field(ele))
         fine_fit_sizes.append(beamsizes[ax_idx_size])
         fine_fit_sizes_err.append(beamsizes[ax_idx_err])
+
+    if np.isnan(fine_fit_sizes).any():
+        not_nan_array = ~np.isnan(fine_fit_sizes)
+        fine_fit_sizes = np.array(fine_fit_sizes)[not_nan_array]
+        fine_fit_sizes_err = np.array(fine_fit_sizes_err)[not_nan_array]
+        x_fine_fit = np.array(x_fine_fit)[not_nan_array]
+        if len(fine_fit_sizes)<3:
+            return np.nan, np.nan
 
     fine_fit_sizes, fine_fit_sizes_err = np.array(fine_fit_sizes), np.array(fine_fit_sizes_err)
     if np.sum(fine_fit_sizes_err)==0:
