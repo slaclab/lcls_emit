@@ -130,8 +130,8 @@ def average_ims(num_images):
     
     mean_xrms = np.mean(np.array(xrms)[idx])
     mean_yrms = np.mean(np.array(yrms)[idx])
-    mean_xrms_err = np.std(np.array(xrms)[idx])/num_images
-    mean_yrms_err = np.std(np.array(yrms)[idx])/num_images
+    mean_xrms_err = np.std(np.array(xrms)[idx])/np.sqrt(num_images)
+    mean_yrms_err = np.std(np.array(yrms)[idx])/np.sqrt(num_images)
 #     mean_xrms_err = np.sqrt(np.mean(np.array(xrms_err)[idx]**2))
 #     mean_yrms_err = np.sqrt(np.mean(np.array(yrms_err)[idx]**2))
     mean_xamp = np.mean(np.array(xamp)[idx])
