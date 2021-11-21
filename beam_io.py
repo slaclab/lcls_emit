@@ -5,17 +5,19 @@ import json
 import time
 import datetime
 import matplotlib.pyplot as plt
+
+from image import Image
+from os.path import exists
+
 try:
     from epics import caget, caput, PV
 except:
     print("did not import epics")
-from image import Image
-from os.path import exists
 
 ##################################
 
 #load image processing setting info
-im_proc = json.load(open('img_proc.json'))
+im_proc = json.load(open('./config_files/img_proc.json'))
 subtract_bg = im_proc['subtract_bg']
 bg_image = im_proc['background_im']
 use_roi = im_proc['use_roi']
@@ -33,26 +35,32 @@ max_samples = im_proc['max_samples']#3 # how many times to sample bad beam
 
 
 #load info about PVs used in measurements (e.g. quad scan PV, image PV)
-meas_pv_info = json.load(open('meas_pv_info.json'))
+meas_pv_info = json.load(open('./config_files/meas_pv_info.json'))
 
-im_pv = PV(meas_pv_info['diagnostic']['pv']['image'])
-n_col_pv =  PV(meas_pv_info['diagnostic']['pv']['ncol'])
-n_row_pv =  PV(meas_pv_info['diagnostic']['pv']['nrow'])
+
+
 resolution = 12.23*1e-6#PV(meas_pv_info['diagnostic']['pv']['resolution'])*1e-6 #12.23*1e-6 # in meters for emittance calc
-x_size_pv = PV(meas_pv_info['diagnostic']['pv']['profmonxsize'])
-y_size_pv = PV(meas_pv_info['diagnostic']['pv']['profmonysize'])
 
-meas_cntrl_pv =  PV(meas_pv_info['meas_device']['pv']['cntrl'])
-meas_read_pv =  PV(meas_pv_info['meas_device']['pv']['read'])
+online=False
+if online:
+
+    im_pv = PV(meas_pv_info['diagnostic']['pv']['image'])
+    n_col_pv =  PV(meas_pv_info['diagnostic']['pv']['ncol'])
+    n_row_pv =  PV(meas_pv_info['diagnostic']['pv']['nrow'])
+    x_size_pv = PV(meas_pv_info['diagnostic']['pv']['profmonxsize'])
+    y_size_pv = PV(meas_pv_info['diagnostic']['pv']['profmonysize'])
+
+    meas_cntrl_pv =  PV(meas_pv_info['meas_device']['pv']['cntrl'])
+    meas_read_pv =  PV(meas_pv_info['meas_device']['pv']['read'])
 
 
 #load info about settings to optimize
-opt_pv_info = json.load(open('opt_pv_info.json'))
+opt_pv_info = json.load(open('./config_files/opt_pv_info.json'))
 opt_pvs = opt_pv_info['opt_vars']
 
 
 #load info about where to put saving of raw images and summaries; make directories if needed and start headings
-savepaths = json.load(open('savepaths.json'))
+savepaths = json.load(open('./config_files/savepaths.json'))
 
 def mkdir_p(path):
     """Set up dirs for results in working dir"""
@@ -116,9 +124,9 @@ if ~file_exists:
 #    vary_pv.put(vary)
 #    varz_pv.put(varz)
     
-def setquad(value):
-    """Sets Q525 to new scan value"""
-    meas_cntrl_pv.put(value)
+#def setquad(value):
+#    """Sets Q525 to new scan value"""
+#    meas_cntrl_pv.put(value)
     
 
 def savesummary(beamsizes,timestamp=(datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")):
@@ -187,10 +195,18 @@ def get_beam_image(subtract_bg = subtract_bg, post=None):
         return list(beamsizes) + [beam_image.proc_image]
 
 def getbeamsizes_from_img(num_images = n_acquire, avg = avg_ims, subtract_bg = subtract_bg, post = None):
-    """Returns xrms, yrms, xrms_err, yrms_err for multiple sampled images; can optionally average multiple images"""
+    """Returns xrms, yrms, xrms_err, yrms_err for multiple sampled images;
+    can optionally average multiple images
+    RETURNS IN RAW UNITS-- NEED TO MULTIPLY BY RESOLUTION FOR M"""
     
     xrms, yrms, xrms_err, yrms_err, xamp, yamp, im = [0]*num_images, [0]*num_images, [0]*num_images, [0]*num_images, [0]*num_images, [0]*num_images, [0]*num_images
     
+    if post:
+        ncol = post[0][1]
+        nrow = post[0][2]
+    else:
+        ncol, nrow = n_col_pv.get(), n_row_pv.get()
+
     for i in range(0,num_images):
         
         
@@ -216,8 +232,9 @@ def getbeamsizes_from_img(num_images = n_acquire, avg = avg_ims, subtract_bg = s
                 xrms[i], yrms[i], xrms_err[i], yrms_err[i], xamp[i], yamp[i] = np.nan,np.nan,np.nan,np.nan,np.nan,np.nan
                 repeat = False
     
-    #average images before takking fits
+    #average images before taking fits
     if avg == True:
+        
 
         im = np.mean(im, axis=0)
         
@@ -236,7 +253,7 @@ def getbeamsizes_from_img(num_images = n_acquire, avg = avg_ims, subtract_bg = s
         #save_beam = list(np.array(beamsizes[0:4])*resolution/1e-6)
         
         timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f") 
-        saveimage(im, ncol, nrow, timestamp, avg_img=True) # pass beamsizes in um
+        saveimage(im.proc_image, ncol, nrow, timestamp, avg_img=True) # pass beamsizes in um
         
         return [mean_xrms, mean_yrms, mean_xrms_err, mean_yrms_err, mean_xamp, mean_yamp, im.proc_image]
         
@@ -268,7 +285,7 @@ def getbeamsizes_from_img(num_images = n_acquire, avg = avg_ims, subtract_bg = s
         
 
 
-def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False):
+def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False, post = None):
     """Returns xrms, yrms, xrms_err, yrms_err, with options to reject bad beams and use either profmon or image processing"""
     
     time.sleep(3)
@@ -301,7 +318,10 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False)
                 count = count + 1
 
             else:
-                beamsizes = getbeamsizes_from_img(num_images = 2, avg = False, subtract_bg = False, post = post)
+                if post:
+                    beamsizes = getbeamsizes_from_img(post = post)
+                else:
+                    beamsizes = getbeamsizes_from_img()
                 print(beamsizes)
 
                 xrms = beamsizes[0]
@@ -311,6 +331,13 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False)
                 xamp = beamsizes[4]
                 yamp = beamsizes[5] 
                 im = beamsizes[6]
+                
+                
+                # convert to meters
+                xrms = xrms*resolution 
+                yrms = yrms*resolution 
+                xrms_err = xrms_err*resolution
+                yrms_err = yrms_err*resolution 
 
                 
                 if count == 3:
@@ -330,7 +357,10 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False)
                 count = count + 1
 
             else:
-                beamsizes = getbeamsizes_from_img(num_images = 2, avg = False, subtract_bg = False, post = post)
+                if post:
+                    beamsizes = getbeamsizes_from_img(post = post)
+                else:
+                    beamsizes = getbeamsizes_from_img()
                 #print(beamsizes)
 
                 xrms = beamsizes[0]
@@ -343,11 +373,11 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False)
                 
         
 
-    # convert to meters
-    xrms = xrms*resolution 
-    yrms = yrms*resolution 
-    xrms_err = xrms_err*resolution
-    yrms_err = yrms_err*resolution 
+                # convert to meters
+                xrms = xrms*resolution 
+                yrms = yrms*resolution 
+                xrms_err = xrms_err*resolution
+                yrms_err = yrms_err*resolution 
     
     if save_summary:
         timestamp=(datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")

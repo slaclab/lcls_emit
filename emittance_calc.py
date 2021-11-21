@@ -7,16 +7,47 @@ from scipy.optimize import curve_fit
 # on sim 
 #from beam_io_sim import get_sizes
 # on lcls
-from beam_io import get_updated_beamsizes
-get_sizes = get_updated_beamsizes
+from beam_io import get_beamsizes
+get_sizes = get_beamsizes
+import json
+from os.path import exists
 
 # do not display warnings when cov can't be computed
 # this will happen when len(y)<=3 and yerr=0
 warnings.simplefilter('ignore', scipy.optimize.OptimizeWarning)
 
-m_0 = 0.511*1e-3 # mass in [GeV]
-d = 2.26 # [m] distance between Q525 and OTR2
-l = 0.108 # effective length [m]
+
+beamline_info = json.load(open('./config_files/beamline_info.json'))
+
+m_0 = beamline_info['m_0']
+d = beamline_info['d']
+l = beamline_info['l']
+twiss0 = beamline_info['Twiss0']
+energy = beamline_info['energy']
+
+#load info about where to put saving of raw images and summaries; make directories if needed and start headings
+savepaths = json.load(open('./config_files/savepaths.json'))
+
+def mkdir_p(path):
+    """Set up dirs for results in working dir"""
+    try:
+        os.makedirs(path)
+    except OSError as exc:
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else:
+            raise
+
+mkdir_p(savepaths['summaries'])
+
+file_exists = exists(savepaths['summaries']+"emit_calc_log.csv.csv")
+
+if ~file_exists:
+
+    #todo add others as inputs
+    f= open(savepaths['summaries']+"emit_calc_log.csv", "a+")
+    f.write(f"{'timestamp'},{'nex'},{'ney'},{'bmx'},{'bmy'},{'xsizes'},{'ysizes'},{'kx'},{'ky'},{'adapted'}\n")
+    f.close()
 
 def func(x, a, b, c):
     """Polynomial function for emittance fit"""
@@ -73,7 +104,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     
     if adapt_ranges:
         try:
-            coefs, cov = adapt_range(k, sizes, w=w, axis=axis, fit_coefs=coefs, x_fit=xfit, energy=0.135, num_points=num_points, save_plot=True, show_plots=show_plots)
+            coefs, cov = adapt_range(k, sizes, w=w, axis=axis, fit_coefs=coefs, x_fit=xfit, energy=energy, num_points=num_points, save_plot=True, show_plots=show_plots)
             # log data
             timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
             if axis=="x":
@@ -112,12 +143,12 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     except RuntimeWarning:
         return np.nan, np.nan, np.nan, np.nan 
 
-def get_bmag(coefs, coefs_err, emit, emit_err, axis):
+def get_bmag(coefs, coefs_err, emit, emit_err, axis,twiss0 = twiss0):
     """Calculates Bmag from calculated emittance
     and from initial Twiss at OTR2: HARDCODED from Matlab GUI"""
     # HARDCODED INIT TWISS PARAMS
     # TODO: clean up LCLS/machine specific info
-    twiss0 = [1e-6, 1e-6, 1.113081026, 1.113021659, -6.89403587e-2, -7.029489754e-2]
+    #twiss0 = [1e-6, 1e-6, 1.113081026, 1.113021659, -6.89403587e-2, -7.029489754e-2]
     
     c2, c1, c0 = coefs
     c2_err, c1_err, c0_err = coefs_err
@@ -225,13 +256,13 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
         plt.show()
     plt.close()
         
-def get_quad_field(k, energy=0.135, l=0.108): 
+def get_quad_field(k, energy=energy, l=l): 
     """Get quad field [kG] from k1 [1/m^2]"""
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
     return np.array(k)*l/0.1/0.2998*energy*beta
 
-def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, num_points=5, save_plot=False, show_plots=True):
+def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, num_points=5, save_plot=False, show_plots=True):
     """Returns new scan quad values if called without initial fit coefs"""
     """Returns new coefs if called from fit_sigma with initial fit coefs"""
     if w is None:
@@ -341,8 +372,10 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
     fine_fit_sizes, fine_fit_sizes_err = [], []
     for ele in x_fine_fit:
         beamsizes = get_sizes(sign*get_quad_field(ele))
+        print(beamsizes)
         fine_fit_sizes.append(beamsizes[ax_idx_size])
         fine_fit_sizes_err.append(beamsizes[ax_idx_err])
+        print(fine_fit_sizes)
 
     if np.isnan(fine_fit_sizes).any():
         not_nan_array = ~np.isnan(fine_fit_sizes)
@@ -368,7 +401,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
     return coefs, cov
 
 def save_data(timestamp, nex, ney, bmx, bmy, nex_err, ney_err, bmx_err, bmy_err, xsizes, ysizes, kx, ky, adapted):
-    f= open(f"emit_calc_log.csv", "a+")
+    f= open(savepaths['summaries']+"emit_calc_log.csv", "a+")
     f.write(f"{timestamp},{nex},{ney},{bmx},{bmy},{xsizes},{ysizes},{kx},{ky},{adapted}\n")
     f.close()
     
