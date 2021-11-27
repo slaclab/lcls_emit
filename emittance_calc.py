@@ -50,7 +50,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     sizes = np.array(sizes)
     if len(sizes)<3:
         print("Less than 3 data points were passed.")
-        return np.nan, np.nan, np.nan, np.nan
+        return np.nan, np.nan, np.nan, np.nan, np.nan
     
     if sizes_err is not None and sizes.all()>0 and sizes_err.all()>0:
         w = 2*sizes*np.array(sizes_err) # sigma for poly fit
@@ -73,7 +73,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     
     if adapt_ranges:
         try:
-            coefs, cov = adapt_range(k, sizes, w=w, axis=axis, fit_coefs=coefs, x_fit=xfit, energy=0.135, num_points=num_points, save_plot=True, show_plots=show_plots)
+            coefs, cov, k = adapt_range(k, sizes, w=w, axis=axis, fit_coefs=coefs, x_fit=xfit, energy=0.135, num_points=num_points, save_plot=True, show_plots=show_plots)
             # log data
             timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
             if axis=="x":
@@ -93,7 +93,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
         plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)
   
     if np.isnan(coefs).any() or np.isnan(cov).any():
-        return np.nan, np.nan, np.nan, np.nan 
+        return np.nan, np.nan, np.nan, np.nan, np.nan
         
     # poly.poly: return c0,c1,c2
     # np.polyfit: highest power first
@@ -108,11 +108,52 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
             # error propagation for dependent variables
             emit_gradient = 1./(4*l*d**2*emit) * np.array([[4*c0, -2*c1, 4*c2]]).T
             emit_err = np.sqrt(np.matmul(np.matmul(emit_gradient.T, cov), emit_gradient))
-            return emit, emit_err[0][0], coefs, coefs_err
+            return emit, emit_err[0][0], coefs, coefs_err, k
     except RuntimeWarning:
-        return np.nan, np.nan, np.nan, np.nan 
+        return np.nan, np.nan, np.nan, np.nan, np.nan
 
-def get_bmag(coefs, coefs_err, emit, emit_err, axis):
+def propagate_sigma(sigma_mat2, mat2):
+    return (mat2 @ sigma_mat2) @ mat2.T
+
+def drift_mat2(L):
+    return np.array( [ [1, L], [0, 1] ])
+
+def quad_mat2(kL, L=l):
+    """
+    Quadrupole transfer matrix, 2x2. Note that 
+    
+    """
+    
+    if L == 0:
+        return thin_quad_mat2(kL)
+    
+    k = kL/L
+    
+    if k == 0:
+        mat2 = drift_mat2(L)
+    elif k > 0:
+        # Focusing
+        rk = np.sqrt(k)
+        phi = rk*L
+        mat2 =  [ [np.cos(phi), np.sin(phi)/rk], [-rk*np.sin(phi), np.cos(phi)] ]
+    else:
+        # Defocusing
+        rk = np.sqrt(-k)
+        phi = rk*L
+        mat2 = [ [np.cosh(phi), np.sinh(phi)/rk], [rk*np.sinh(phi), np.cosh(phi)] ]
+        
+    return mat2
+
+def quad_drift_mat2(kL, *, Ltot=d+l,  Lquad=l):
+    """
+    Composite [quad, drift] 2x2 transfer matrix. 
+    """
+    
+    Ldrift = Ltot - Lquad
+    
+    return drift_mat2(Ldrift) @ quad_mat2(kL, Lquad)
+
+def get_bmag(coefs, coefs_err, k, emit, emit_err, axis):
     """Calculates Bmag from calculated emittance
     and from initial Twiss at OTR2: HARDCODED from Matlab GUI"""
     # HARDCODED INIT TWISS PARAMS
@@ -126,16 +167,43 @@ def get_bmag(coefs, coefs_err, emit, emit_err, axis):
     sig12 = (-c1 - 2*d*l*sig11) / (2*d**2*l)
     sig22 = (c0 - sig11 - 2*d*sig12) / d**2
     
+    # Matrix form
+    sigma0 = np.array([ [sig11, sig12], [sig12, sig22] ])
+    
     beta0 =  twiss0[2] if axis == 'x' else twiss0[3] if axis == 'y' else 0
     alpha0 = twiss0[4] if axis == 'x' else twiss0[5] if axis == 'y' else 0
     gamma0 = (1+alpha0**2)/beta0
 
-    beta = sig11/emit
-    alpha = -sig12/emit
-    gamma = sig22/emit
-        
-    bmag = 0.5 * (beta*gamma0 - 2*alpha*alpha0 + gamma*beta0)
+    beta_quad = sig11/emit
+    alpha_quad = -sig12/emit
+    gamma_quad = sig22/emit
     
+    # Propagate forward to the screen
+    sig_11_screen = []
+    sig_12_screen = []
+    sig_22_screen = []
+    
+    kLlist = k*l
+    for kL in kLlist:
+        mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
+        sigma1 = propagate_sigma(sigma0, mat2)
+        sig_11_screen.append(sigma1[0,0])
+        sig_12_screen.append(sigma1[0,1])        
+        sig_22_screen.append(sigma1[1,1])        
+
+    sig_11_screen = np.array(sig_11_screen)
+    sig_12_screen = np.array(sig_12_screen)
+    sig_22_screen = np.array(sig_22_screen)
+    
+    beta  = sig_11_screen/emit
+    alpha = -sig_12_screen/emit
+    gamma = sig_22_screen/emit
+    
+    # Form bmag
+    gamma0 = (1+alpha0**2)/beta0
+    bmag = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
+    bmag = np.min(bmag)
+        
     # ignoring correlations
     # TODO: check error propagation for bmag
     bmag_err = bmag * np.sqrt((c2_err/c2)**2 + (c1_err/c1)**2 + (c0_err/c0)**2)
@@ -155,10 +223,10 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     kx = get_k1(get_gradient(xrange), beta*energy)
     ky = get_k1(get_gradient(yrange), beta*energy)
     
-    emitx, emitx_err, coefsx, coefsx_err = fit_sigma(np.array(xrms), kx, axis='x', sizes_err=xrms_err,\
+    emitx, emitx_err, coefsx, coefsx_err, kx_final = fit_sigma(np.array(xrms), kx, axis='x', sizes_err=xrms_err,\
                                        adapt_ranges=adapt_ranges, num_points=num_points, show_plots=show_plots)
 
-    emity, emity_err, coefsy, coefsy_err = fit_sigma(np.array(yrms), -ky, axis='y', sizes_err=yrms_err,\
+    emity, emity_err, coefsy, coefsy_err, ky_final = fit_sigma(np.array(yrms), -ky, axis='y', sizes_err=yrms_err,\
                                        adapt_ranges=adapt_ranges, num_points=num_points, show_plots=show_plots)
     
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
@@ -167,8 +235,8 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
         save_data(timestamp,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,xrms,yrms,kx,ky,str(adapt_ranges))
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     
-    bmagx, bmagx_err = get_bmag(coefsx, coefsx_err, emitx, emitx_err, axis='x')
-    bmagy, bmagy_err = get_bmag(coefsy, coefsy_err, emity, emity_err, axis='y')    
+    bmagx, bmagx_err = get_bmag(coefsx, coefsx_err, kx_final, emitx, emitx_err, axis='x')
+    bmagy, bmagy_err = get_bmag(coefsy, coefsy_err, ky_final, emity, emity_err, axis='y')    
         
     norm_emitx = emitx*gamma*beta
     norm_emitx_err = emitx_err*gamma*beta
@@ -365,7 +433,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
     xfit = np.linspace(np.min(x_fine_fit),np.max(x_fine_fit), 100)
     plot_fit(x_fine_fit, fine_fit_sizes, xfit, yerr=fine_fit_sizes_err, axis=axis,\
              save_plot=save_plot, show_plots=show_plots, title_suffix=" - adapted range")
-    return coefs, cov
+    return coefs, cov, x_fine_fit
 
 def save_data(timestamp, nex, ney, bmx, bmy, nex_err, ney_err, bmx_err, bmy_err, xsizes, ysizes, kx, ky, adapted):
     f= open(f"emit_calc_log.csv", "a+")
