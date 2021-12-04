@@ -15,9 +15,10 @@ except:
     print("did not import epics")
 
 ##################################
+rootp = '/Users/edelen/NEW/FACET/facet_edelen/edelen/Untitled Folder/lcls_emit/'
 
 #load image processing setting info
-im_proc = json.load(open('./config_files/img_proc.json'))
+im_proc = json.load(open(rootp+'config_files/img_proc.json'))
 subtract_bg = im_proc['subtract_bg']
 bg_image = im_proc['background_im']
 use_roi = im_proc['use_roi']
@@ -28,18 +29,24 @@ roi_ymax = im_proc['roi']['ymax']
 avg_ims = im_proc['avg_ims']
 n_acquire = im_proc['n_to_acquire']
 
-amp_threshold = im_proc['amp_threshold']#1500 
+amp_threshold = 3000 #im_proc['amp_threshold']#1500 
 min_sigma = im_proc['min_sigma']#1.5 # noise
 max_sigma = im_proc['max_sigma']#40 # large/diffuse beam
 max_samples = im_proc['max_samples']#3 # how many times to sample bad beam
 
+def isotime():
+    return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).astimezone().replace(microsecond=0).isoformat()
+isotime()
+
 
 #load info about PVs used in measurements (e.g. quad scan PV, image PV)
-meas_pv_info = json.load(open('./config_files/meas_pv_info.json'))
+meas_pv_info = json.load(open(rootp+'config_files/meas_pv_info.json'))
+
+pv_savelist = json.load(open(rootp+'config_files/save_scalar_pvs.json'))
 
 
 
-resolution = 12.23*1e-6#PV(meas_pv_info['diagnostic']['pv']['resolution'])*1e-6 #12.23*1e-6 # in meters for emittance calc
+resolution = epics.caget('PROF:IN10:571:RESOLUTION')#12.23*1e-6#PV(meas_pv_info['diagnostic']['pv']['resolution'])*1e-6 #12.23*1e-6 # in meters for emittance calc
 
 online=False
 if online:
@@ -55,12 +62,12 @@ if online:
 
 
 #load info about settings to optimize
-opt_pv_info = json.load(open('./config_files/opt_pv_info.json'))
+opt_pv_info = json.load(open(rootp+'config_files/opt_pv_info.json'))
 opt_pvs = opt_pv_info['opt_vars']
 
 
 #load info about where to put saving of raw images and summaries; make directories if needed and start headings
-savepaths = json.load(open('./config_files/savepaths.json'))
+savepaths = json.load(open(rootp+'config_files/savepaths.json'))
 
 def mkdir_p(path):
     """Set up dirs for results in working dir"""
@@ -79,7 +86,10 @@ mkdir_p(savepaths['fits'])
 
 file_exists = exists(savepaths['summaries']+"image_acq_quad_info.csv")
 
-if ~file_exists:
+#print('fe',file_exists)
+
+if not file_exists:
+    #print('foo1')
 
     #todo add others as inputs
     f= open(savepaths['summaries']+"image_acq_quad_info.csv", "a+")
@@ -88,8 +98,9 @@ if ~file_exists:
     
 
 file_exists = exists(savepaths['summaries']+"beamsize_config_info.csv")
-
-if ~file_exists:
+#print('fe',file_exists)
+if not file_exists:
+    #print('foo2')
     #todo add others as inputs
     f= open(savepaths['summaries']+"beamsize_config_info.csv", "a+")
     f.write(f"{'timestamp'},{'varx_cur'},{'vary_cur'},{'varz_cur'},{'bact_cur'},{'xrms'},{'yrms'},{'xrms_err'},{'yrms_err'}\n")
@@ -124,19 +135,10 @@ if ~file_exists:
 #    vary_pv.put(vary)
 #    varz_pv.put(varz)
     
-#def setquad(value):
-#    """Sets Q525 to new scan value"""
-#    meas_cntrl_pv.put(value)
-
-# def quad_control(val=None, action="get"):
-#     """Function called by emit calc to save/set quad"""
-#     if action == "get":
-#         return meas_read_pv.get()
-#     elif action == "set":
-#         setquad(val)
-#         return None
-#     else:
-#         raise ValueError("Invalid quad function")
+def setquad(value):
+    """Sets Q525 to new scan value"""
+    meas_cntrl_pv.put(value)
+    
 
 def savesummary(beamsizes,timestamp=(datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")):
         """Saves summary info for beamsize fits"""
@@ -222,17 +224,18 @@ def getbeamsizes_from_img(num_images = n_acquire, avg = avg_ims, subtract_bg = s
         repeat = True
         count = 0
         # retake bad images 3 times
-        print(i)
+       # print(i)
         
         while repeat:
-            xrms[i], yrms[i], xrms_err[i], yrms_err[i], xamp[i], yamp[i], im[i] = get_beam_image(subtract_bg,post[i])
+            xrms[i], yrms[i], xrms_err[i], yrms_err[i], xamp[i], yamp[i], im[i] = get_beam_image(subtract_bg,post)
             
             #plt.imshow(im[i])
             #plt.show()
 
             
-            count = count + 1           
-
+            count = count + 1 
+            
+            
             if xamp[i]>amp_threshold and yamp[i]>amp_threshold and xrms[i]>min_sigma and yrms[i]>min_sigma and xrms[i]<max_sigma and yrms[i]<max_sigma:
                 # if conditions are met, stop resampling this image
                 repeat = False
@@ -294,7 +297,7 @@ def getbeamsizes_from_img(num_images = n_acquire, avg = avg_ims, subtract_bg = s
         
 
 
-def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False, post = None):
+def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, post = None):
     """Returns xrms, yrms, xrms_err, yrms_err, with options to reject bad beams and use either profmon or image processing"""
     
     time.sleep(3)
@@ -307,6 +310,10 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False,
     yamp =  np.nan
     beamsizes = [np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]
     im = None
+    
+    #remove hardcoding
+    min_sigma=0.000001
+    max_sigma=0.004
 
     if reject_bad_beam:
 
@@ -326,12 +333,11 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False,
                 
                 count = count + 1
 
-            else:
-                if post:
-                    beamsizes = getbeamsizes_from_img(post = post)
-                else:
-                    beamsizes = getbeamsizes_from_img()
-                print(beamsizes)
+            if ~use_profMon:
+                #if post:
+                #    beamsizes = getbeamsizes_from_img(post = post)
+                #:
+                beamsizes = getbeamsizes_from_img()
 
                 xrms = beamsizes[0]
                 yrms = beamsizes[1]
@@ -339,7 +345,7 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False,
                 yrms_err = beamsizes[3]
                 xamp = beamsizes[4]
                 yamp = beamsizes[5] 
-                im = beamsizes[6]
+                #im = beamsizes[6]
                 
                 
                 # convert to meters
@@ -347,6 +353,11 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False,
                 yrms = yrms*resolution 
                 xrms_err = xrms_err*resolution
                 yrms_err = yrms_err*resolution 
+                
+                #print('bzs', beamsizes)
+                
+                #print(xrms, min_sigma, yrms, min_sigma, xrms, max_sigma, yrms, max_sigma)
+
 
                 
                 if count == 3:
@@ -378,7 +389,7 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False,
                 yrms_err = beamsizes[3]
                 xamp = beamsizes[4]
                 yamp = beamsizes[5]  
-                im = beamsizes[6]
+                #im = beamsizes[6]
                 
         
 
@@ -387,24 +398,67 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = False,
                 yrms = yrms*resolution 
                 xrms_err = xrms_err*resolution
                 yrms_err = yrms_err*resolution 
-    
+
     if save_summary:
         timestamp=(datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
-        save_config(xrms,yrms,xrms_err,yrms_err,timestamp,im)
+
+        save_config(xrms,yrms,xrms_err,yrms_err,timestamp),#im)
+        numpy_save(timestamp)
 
     return xrms, yrms, xrms_err, yrms_err
+
+
+def numpy_save(timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['raw_saves']):
+    
+    
+    ts = isotime()
+    x = epics.caget_many(savelist)
+    x.append(ts)
+    if timestamp:
+        x.append(timestamp)
+    else:
+        x.append(ts)
+    
+    
+    img=epics.caget('PROF:IN10:571:Image:ArrayData')
+    nrow = epics.caget('PROF:IN10:571:Image:ArraySize0_RBV')
+    ncol = epics.caget('PROF:IN10:571:Image:ArraySize1_RBV')    
+
+    res = epics.caget('PROF:IN10:571:RESOLUTION')
+    
+    nrow1 = caget("CAMR:LT10:900:Image:ArraySize0_RBV")
+    ncol1 = caget("CAMR:LT10:900:Image:ArraySize1_RBV")
+
+    resolution1 = caget("CAMR:LT10:900:RESOLUTION")
+    im1 =caget('CAMR:LT10:900:Image:ArrayData')
+    
+
+    np.save(path+ts+'_571_img_.npy',img.reshape((ncol,nrow)))
+    np.save(path+ts+'_571_res_.npy',np.array(res))
+    
+    np.save(path+ts+'_x_.npy',np.array(x))
+
+    np.save(path+ts+'_vcc_img_.npy',im1.reshape((ncol1,nrow1)))
+    np.save(path+ts+'_vcc_res_.npy',np.array(resolution1))
+
+
 
 def save_config(xrms,yrms,xrms_err,yrms_err,config_path=savepaths['summaries'],timestamp=(datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f"),im = None,impath = savepaths['images']):
     
     
     f= open(config_path+"beamsize_config_info.csv", "a+")
+
     
+    
+
     #todo make more general, pandas etc
     varx_cur = caget(opt_pvs[0])
     vary_cur = caget(opt_pvs[1])
     varz_cur = caget(opt_pvs[2])
     bact_cur = quad_read_pv.get()
     f.write(f"{timestamp},{varx_cur},{vary_cur},{varz_cur},{bact_cur},{xrms},{yrms},{xrms_err},{yrms_err}\n")
+    
+      
     f.close()
     
     if im:

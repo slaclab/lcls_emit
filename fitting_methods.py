@@ -87,7 +87,7 @@ def find_rms_cut_area(y, para0 = None, show_plots=False, cut_area = 0.05):
 
     return para, para_errors
 
-def plot_fit(x, y, para_x, show_plots=False,save_plots=True):
+def plot_fit(x, y, para_x, show_plots=False,save_plots=False):
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     fig = plt.figure(figsize=(7 ,5))
     plt.plot(x, y, 'b-', label='data')

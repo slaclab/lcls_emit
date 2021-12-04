@@ -7,7 +7,7 @@ from scipy.optimize import curve_fit
 # on sim 
 #from beam_io_sim import get_sizes
 # on lcls
-from beam_io import get_beamsizes, quad_control
+from beam_io import get_beamsizes, setquad
 get_sizes = get_beamsizes
 import json
 from os.path import exists
@@ -16,8 +16,9 @@ from os.path import exists
 # this will happen when len(y)<=3 and yerr=0
 warnings.simplefilter('ignore', scipy.optimize.OptimizeWarning)
 
+rootp = '/Users/edelen/NEW/FACET/facet_edelen/edelen/Untitled Folder/lcls_emit/'
 
-beamline_info = json.load(open('./config_files/beamline_info.json'))
+beamline_info = json.load(open(rootp+'config_files/beamline_info.json'))
 
 m_0 = beamline_info['m_0']
 d = beamline_info['d']
@@ -26,7 +27,9 @@ twiss0 = beamline_info['Twiss0']
 energy = beamline_info['energy']
 
 #load info about where to put saving of raw images and summaries; make directories if needed and start headings
-savepaths = json.load(open('./config_files/savepaths.json'))
+savepaths = json.load(open(rootp+'config_files/savepaths.json'))
+
+pv_savelist = json.load(open(rootp+'config_files/save_scalar_pvs.json'))
 
 def mkdir_p(path):
     """Set up dirs for results in working dir"""
@@ -40,9 +43,9 @@ def mkdir_p(path):
 
 mkdir_p(savepaths['summaries'])
 
-file_exists = exists(savepaths['summaries']+"emit_calc_log.csv.csv")
+file_exists = exists(savepaths['summaries']+"emit_calc_log.csv")
 
-if ~file_exists:
+if not file_exists:
 
     #todo add others as inputs
     f= open(savepaths['summaries']+"emit_calc_log.csv", "a+")
@@ -214,20 +217,13 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     sig_12_screen = []
     sig_22_screen = []
     
-#     kLlist = k*l
-#     for kL in kLlist:
-#         mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
-#         sigma1 = propagate_sigma(sigma0, mat2)
-#         sig_11_screen.append(sigma1[0,0])
-#         sig_12_screen.append(sigma1[0,1])        
-#         sig_22_screen.append(sigma1[1,1])   
-
-    kL = k*l
-    mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
-    sigma1 = propagate_sigma(sigma0, mat2)
-    sig_11_screen.append(sigma1[0,0])
-    sig_12_screen.append(sigma1[0,1])        
-    sig_22_screen.append(sigma1[1,1])         
+    kLlist = k*l
+    for kL in kLlist:
+        mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
+        sigma1 = propagate_sigma(sigma0, mat2)
+        sig_11_screen.append(sigma1[0,0])
+        sig_12_screen.append(sigma1[0,1])        
+        sig_22_screen.append(sigma1[1,1])        
 
     sig_11_screen = np.array(sig_11_screen)
     sig_12_screen = np.array(sig_12_screen)
@@ -240,10 +236,10 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     # Form bmag
     gamma0 = (1+alpha0**2)/beta0
     bmag = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
-    bmag = np.min(bmag) # if more than one k val, TODO: is this ever needed?
+    bmag = np.min(bmag) # TODO: FIT AND RETURN MIN OF FIT INSTEAD (if not getting at given Q value)
         
     # ignoring correlations
-    # TODO: check error propagation for bmag (incl. correlations)
+    # TODO: check error propagation for bmag
     bmag_err = bmag * np.sqrt((c2_err/c2)**2 + (c1_err/c1)**2 + (c0_err/c0)**2)
     return bmag, bmag_err
 
@@ -257,10 +253,6 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     mkdir_p("plots")
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
-    
-    # get init quad value in kGauss
-    init_quad = quad_control(action="get")
-    init_k = get_k1(get_gradient(init_quad), beta*energy)
 
     kx = get_k1(get_gradient(xrange), beta*energy)
     ky = get_k1(get_gradient(yrange), beta*energy)
@@ -277,8 +269,8 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
         save_data(timestamp,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,xrms,yrms,kx,ky,str(adapt_ranges))
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     
-    bmagx, bmagx_err = get_bmag(coefsx, coefsx_err, init_k, emitx, emitx_err, axis='x')
-    bmagy, bmagy_err = get_bmag(coefsy, coefsy_err, -init_k, emity, emity_err, axis='y')    
+    bmagx, bmagx_err = get_bmag(coefsx, coefsx_err, kx_final, emitx, emitx_err, axis='x')
+    bmagy, bmagy_err = get_bmag(coefsy, coefsy_err, ky_final, emity, emity_err, axis='y')    
         
     norm_emitx = emitx*gamma*beta
     norm_emitx_err = emitx_err*gamma*beta
@@ -286,16 +278,20 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     norm_emity_err = emity_err*gamma*beta 
     
     # log data
+
     save_data(timestamp,norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,\
-              xrms,yrms,kx,ky,str(adapt_ranges))
+              str(np.array(xrms)),str(np.array(yrms)),str(kx),str(ky),str(adapt_ranges))
     
+    numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err, timestamp=timestamp):
+    
+    
+    #print(adapt_ranges)
     print(f"nemitx: {norm_emitx/1e-6:.2f}, nemity: {norm_emity/1e-6:.2f}")
     print(f"nemitx_err: {norm_emitx_err/1e-6:.2f}, nemity_err: {norm_emity_err/1e-6:.2f}")
     print(f"bmagx: {bmagx:.2f}, bmagy: {bmagy:.2f}")
     print(f"bmagx_err: {bmagx_err:.2f}, bmagy_err: {bmagy_err:.2f}")
     
-    # return quad to init value TODO: do this at every return statement (e.g. when it fails and returns nans)
-    quad_control(init_quad, action="set")
+
     
     return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err
 
@@ -309,7 +305,7 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     x = sign*get_quad_field(x)
     x_fit_gauss = sign*get_quad_field(x_fit)
     
-    if yerr is not None and yerr.all() > 0:
+    if yerr is not None:
         abs_sigma = True
         yerr_plot = np.array(yerr/1e-6) # for plotting
     else: 
@@ -317,7 +313,7 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
         yerr_plot = None
         
     # fit just for plotting
-    coefs, cov = curve_fit(func, x, y, sigma=yerr_plot, absolute_sigma=abs_sigma)
+    coefs, cov = curve_fit(func, x, y, sigma=yerr, absolute_sigma=abs_sigma)
     y_fit = np.array(np.polyval(coefs, x_fit_gauss))
 
     plt.errorbar(x, y/1e-6, yerr=yerr_plot, marker="x")
@@ -329,14 +325,14 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     # DEBUGGING
-    if save_plot:
-        try:
-            plt.savefig(f"./plots/emittance_{axis}_fit_{timestamp}.png", dpi=100)
-        except:
-            plt.savefig(f"./emittance_fit_{axis}_{timestamp}.png", dpi=100)
-    if show_plots:
-        plt.show()
-    plt.close()
+    #if save_plot:
+    #    try:
+    #        plt.savefig(f"./plots/emittance_{axis}_fit_{timestamp}.png", dpi=100)
+    #    except:
+    #        plt.savefig(f"./emittance_fit_{axis}_{timestamp}.png", dpi=100)
+    #if show_plots:
+    #    plt.show()
+    #plt.close()
         
 def get_quad_field(k, energy=energy, l=l): 
     """Get quad field [kG] from k1 [1/m^2]"""
@@ -430,11 +426,9 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         dist_min = np.abs(x[np.argmin(y)]-np.min(roots))
         dist_max = np.abs(x[np.argmin(y)]-np.max(roots))
         if dist_min<dist_max:
-            diff = dist_max-dist_min
-            x_fine_fit = np.linspace(np.min(roots), np.max(roots)-diff, num_points)
+            x_fine_fit = np.linspace(np.min(roots), np.max(roots)-4, num_points)
         elif dist_min>dist_max:
-            diff = dist_min-dist_max
-            x_fine_fit = np.linspace(np.min(roots)+diff, np.max(roots), num_points)
+            x_fine_fit = np.linspace(np.min(roots)+4, np.max(roots), num_points)
         else:
             x_fine_fit = np.linspace(np.min(roots)+2, np.max(roots)-2, num_points)
             
@@ -455,11 +449,12 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     
     fine_fit_sizes, fine_fit_sizes_err = [], []
     for ele in x_fine_fit:
-        beamsizes = get_sizes(sign*get_quad_field(ele))
-        print(beamsizes)
+        setquad(sign*get_quad_field(ele))
+        beamsizes = get_sizes()
+        #print(beamsizes)
         fine_fit_sizes.append(beamsizes[ax_idx_size])
         fine_fit_sizes_err.append(beamsizes[ax_idx_err])
-        print(fine_fit_sizes)
+        #print(fine_fit_sizes)
 
     if np.isnan(fine_fit_sizes).any():
         not_nan_array = ~np.isnan(fine_fit_sizes)
@@ -482,13 +477,55 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     xfit = np.linspace(np.min(x_fine_fit),np.max(x_fine_fit), 100)
     plot_fit(x_fine_fit, fine_fit_sizes, xfit, yerr=fine_fit_sizes_err, axis=axis,\
              save_plot=save_plot, show_plots=show_plots, title_suffix=" - adapted range")
-    return coefs, cov, x_fine_fit
+    return coefs, cov, x_fine_fitnot 
+
+
+def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,  timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['emit_saves']):
+    
+    
+    ts = isotime()
+    x = epics.caget_many(savelist)
+    x.append(ts)
+    if timestamp:
+        x.append(timestamp)
+    else:
+        x.append(ts)
+        
+    x.append(norm_emitx)
+    x.append(norm_emity)
+    x.append(bmagx)
+    x.append(bmagy)
+    x.append(norm_emitx_err)
+    x.append(norm_emity_err)
+    x.append(bmagx_err)
+    x.append(bmaxy_err)
+    
+    img=epics.caget('PROF:IN10:571:Image:ArrayData')
+    nrow = epics.caget('PROF:IN10:571:Image:ArraySize0_RBV')
+    ncol = epics.caget('PROF:IN10:571:Image:ArraySize1_RBV')    
+
+    res = epics.caget('PROF:IN10:571:RESOLUTION')
+    
+    nrow1 = caget("CAMR:LT10:900:Image:ArraySize0_RBV")
+    ncol1 = caget("CAMR:LT10:900:Image:ArraySize1_RBV")
+
+    resolution1 = caget("CAMR:LT10:900:RESOLUTION")
+    im1 =caget('CAMR:LT10:900:Image:ArrayData')
+    
+
+    np.save(path+ts+'_571_img_.npy',img.reshape((ncol,nrow)))
+    np.save(path+ts+'_571_res_.npy',np.array(res))
+    
+    np.save(path+ts+'_x_.npy',np.array(x))
+
+    np.save(path+ts+'_vcc_img_.npy',im1.reshape((ncol1,nrow1)))
+    np.save(path+ts+'_vcc_res_.npy',np.array(resolution1))
 
 def save_data(timestamp, nex, ney, bmx, bmy, nex_err, ney_err, bmx_err, bmy_err, xsizes, ysizes, kx, ky, adapted):
     f= open(savepaths['summaries']+"emit_calc_log.csv", "a+")
     f.write(f"{timestamp},{nex},{ney},{bmx},{bmy},{xsizes},{ysizes},{kx},{ky},{adapted}\n")
     f.close()
-    
+
 class ConcaveFitError(Exception):
     """Raised when the adapted range emit 
     fit results in concave polynomial"""
