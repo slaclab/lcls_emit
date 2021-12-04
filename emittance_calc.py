@@ -7,7 +7,7 @@ from scipy.optimize import curve_fit
 # on sim 
 #from beam_io_sim import get_sizes
 # on lcls
-from beam_io import get_updated_beamsizes
+from beam_io import get_updated_beamsizes, quad_control
 get_sizes = get_updated_beamsizes
 
 # do not display warnings when cov can't be computed
@@ -153,7 +153,7 @@ def quad_drift_mat2(kL, *, Ltot=d+l,  Lquad=l):
     
     return drift_mat2(Ldrift) @ quad_mat2(kL, Lquad)
 
-def get_bmag(coefs, coefs_err, k, emit, emit_err, axis):
+def get_bmag(coefs, coefs_err, k, emit, emit_err, k, axis):
     """Calculates Bmag from calculated emittance
     and from initial Twiss at OTR2: HARDCODED from Matlab GUI"""
     # HARDCODED INIT TWISS PARAMS
@@ -182,7 +182,7 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis):
     sig_11_screen = []
     sig_12_screen = []
     sig_22_screen = []
-    
+
     kLlist = k*l
     for kL in kLlist:
         mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
@@ -202,7 +202,7 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis):
     # Form bmag
     gamma0 = (1+alpha0**2)/beta0
     bmag = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
-    bmag = np.min(bmag)
+    bmag = np.min(bmag) # if more than one k val
         
     # ignoring correlations
     # TODO: check error propagation for bmag
@@ -215,10 +215,15 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
        given quad values and beamsizes""" 
     if np.isnan(xrms).any() or np.isnan(yrms).any():
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
-    
-    mkdir_p("plots")
+
+    mkdir_p("plots") # make directory for saving plots
+
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
+
+    # get init quad value in kGauss
+    init_quad = quad_control(type="get")
+    init_k = get_k1(get_gradient(init_quad), beta*energy)
 
     kx = get_k1(get_gradient(xrange), beta*energy)
     ky = get_k1(get_gradient(yrange), beta*energy)
@@ -235,8 +240,8 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
         save_data(timestamp,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,xrms,yrms,kx,ky,str(adapt_ranges))
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     
-    bmagx, bmagx_err = get_bmag(coefsx, coefsx_err, kx_final, emitx, emitx_err, axis='x')
-    bmagy, bmagy_err = get_bmag(coefsy, coefsy_err, ky_final, emity, emity_err, axis='y')    
+    bmagx, bmagx_err = get_bmag(coefsx, coefsx_err, kx_final, emitx, emitx_err, init_k, axis='x')
+    bmagy, bmagy_err = get_bmag(coefsy, coefsy_err, ky_final, emity, emity_err, init_k, axis='y')
         
     norm_emitx = emitx*gamma*beta
     norm_emitx_err = emitx_err*gamma*beta
@@ -251,7 +256,10 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     print(f"nemitx_err: {norm_emitx_err/1e-6:.2f}, nemity_err: {norm_emity_err/1e-6:.2f}")
     print(f"bmagx: {bmagx:.2f}, bmagy: {bmagy:.2f}")
     print(f"bmagx_err: {bmagx_err:.2f}, bmagy_err: {bmagy_err:.2f}")
-    
+
+    # return quad to init value TODO: do this at every return statement
+    quad_control(init_quad, type="set")
+
     return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err
 
 def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, title_suffix=""):
@@ -264,13 +272,13 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     x = sign*get_quad_field(x)
     x_fit_gauss = sign*get_quad_field(x_fit)
     
-    if yerr is not None:
+    if yerr is not None and yerr.all() > 0:
         abs_sigma = True
         yerr_plot = np.array(yerr/1e-6) # for plotting
     else: 
         abs_sigma = False
         yerr_plot = None
-        
+
     # fit just for plotting
     coefs, cov = curve_fit(func, x, y, sigma=yerr, absolute_sigma=abs_sigma)
     y_fit = np.array(np.polyval(coefs, x_fit_gauss))
@@ -421,13 +429,13 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
             return np.nan, np.nan
 
     fine_fit_sizes, fine_fit_sizes_err = np.array(fine_fit_sizes), np.array(fine_fit_sizes_err)
-    if np.sum(fine_fit_sizes_err)==0:
-        w = None
-        abs_sigma = False
-    else:
+    if fine_fit_sizes_err is not None and fine_fit_sizes_err.all()>0:
         w = 2*fine_fit_sizes*fine_fit_sizes_err # since we are squaring the beamsize
         abs_sigma = True
-        
+    else:
+        w = None
+        abs_sigma = False
+
     # fit
     coefs, cov = curve_fit(func, x_fine_fit, fine_fit_sizes**2, sigma=w, absolute_sigma=abs_sigma)
     xfit = np.linspace(np.min(x_fine_fit),np.max(x_fine_fit), 100)

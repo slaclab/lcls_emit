@@ -220,6 +220,14 @@ def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False, reject_bad_
     f.close()
     return xrms, yrms, xrms_err, yrms_err
 
+def quad_control(val=None, type="get"):
+    if type=="get":
+        return quad_act_pv.get()
+    elif type=="set":
+        setquad(val)
+        return None
+    else:
+        raise ValueError("Invalid quad function")
 
 def mkdir_p(path):
     """Set up dirs for results in working dir"""
