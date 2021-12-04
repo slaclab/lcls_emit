@@ -4,6 +4,13 @@ import sys
 import datetime
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+import json
+
+rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+
+#load info about where to put saving of raw images and summaries; make directories if needed and start headings
+savepaths = json.load(open(rootp+'config_files/savepaths.json'))
+
 
 def gaussian_linear_background(x, amp, mu, sigma, slope=0, offset=0):
     """Gaussian plus linear background fn"""
@@ -99,7 +106,7 @@ def plot_fit(x, y, para_x, show_plots=False,save_plots=False):
     plt.tight_layout()
     
     if save_plots:
-        plt.savefig(f"./plots/beamsize_fit_{timestamp}.png", dpi=100)
+        plt.savefig(savepaths['fits'],f"beamsize_fit_{timestamp}.png", dpi=100)
     if show_plots:
         plt.show()
     plt.close()

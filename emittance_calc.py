@@ -12,11 +12,18 @@ get_sizes = get_beamsizes
 import json
 from os.path import exists
 
+import epics
+from epics import caget,caput
+def isotime():
+    return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).astimezone().replace(microsecond=0).isoformat()
+isotime()
+
+
 # do not display warnings when cov can't be computed
 # this will happen when len(y)<=3 and yerr=0
 warnings.simplefilter('ignore', scipy.optimize.OptimizeWarning)
 
-rootp = '/Users/edelen/NEW/FACET/facet_edelen/edelen/Untitled Folder/lcls_emit/'
+rootp = '/home/fphysics/edelen/sw/lcls_emit/'
 
 beamline_info = json.load(open(rootp+'config_files/beamline_info.json'))
 
@@ -282,7 +289,7 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     save_data(timestamp,norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,\
               str(np.array(xrms)),str(np.array(yrms)),str(kx),str(ky),str(adapt_ranges))
     
-    numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err, timestamp=timestamp):
+    numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err, timestamp=timestamp)
     
     
     #print(adapt_ranges)
@@ -305,7 +312,7 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     x = sign*get_quad_field(x)
     x_fit_gauss = sign*get_quad_field(x_fit)
     
-    if yerr is not None:
+    if yerr is not None and yerr.all() > 0:
         abs_sigma = True
         yerr_plot = np.array(yerr/1e-6) # for plotting
     else: 
@@ -325,14 +332,13 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     # DEBUGGING
-    #if save_plot:
-    #    try:
-    #        plt.savefig(f"./plots/emittance_{axis}_fit_{timestamp}.png", dpi=100)
-    #    except:
-    #        plt.savefig(f"./emittance_fit_{axis}_{timestamp}.png", dpi=100)
-    #if show_plots:
-    #    plt.show()
-    #plt.close()
+    if save_plot:
+
+        plt.savefig(savepaths['fits'] + f"emittance_{axis}_fit_{timestamp}.png", dpi=100)
+
+    if show_plots:
+        plt.show()
+    plt.close()
         
 def get_quad_field(k, energy=energy, l=l): 
     """Get quad field [kG] from k1 [1/m^2]"""
@@ -361,7 +367,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
             k=-k
             min_k, max_k = np.min(k), np.max(k)
 
-        fit_coefs, fit_cov = curve_fit(func, k, y** 2, sigma=w, absolute_sigma=abs_sigma)
+        fit_coefs, fit_cov = curve_fit(func, k, y**2, sigma=w, absolute_sigma=abs_sigma)
 
         x_fit = np.linspace(min_k, max_k, 100)
         x=k
@@ -371,11 +377,11 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     if axis == 'x':
         min_x, max_x = np.min(x), 0
         # quad ranges 0 to -10 kG for scanning
-        min_x_range, max_x_range = -22.2, 0
+        min_x_range, max_x_range = -20.0, -13.0
     elif axis == 'y':
         min_x, max_x = np.min(x), np.max(x)
         # quad ranges 0 to -10 kG for scanning
-        min_x_range, max_x_range = 0, 22.2
+        min_x_range, max_x_range = 13, 20.0
         
     c2, c1, c0 = fit_coefs
     
@@ -385,7 +391,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         concave_function = False
     
     # find range within 2-3x the focus size 
-    y_lim = np.min(np.polyval(fit_coefs, x_fit))*2
+    y_lim = np.min(np.polyval(fit_coefs, x_fit))*1.3
     if y_lim<0:
         print(f"{axis} axis: min. of poly fit is negative. Setting it to 0.")
         y_lim = np.mean(y**2)/5
@@ -477,7 +483,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     xfit = np.linspace(np.min(x_fine_fit),np.max(x_fine_fit), 100)
     plot_fit(x_fine_fit, fine_fit_sizes, xfit, yerr=fine_fit_sizes_err, axis=axis,\
              save_plot=save_plot, show_plots=show_plots, title_suffix=" - adapted range")
-    return coefs, cov, x_fine_fitnot 
+    return coefs, cov, x_fine_fit
 
 
 def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,  timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['emit_saves']):
@@ -498,7 +504,7 @@ def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,b
     x.append(norm_emitx_err)
     x.append(norm_emity_err)
     x.append(bmagx_err)
-    x.append(bmaxy_err)
+    x.append(bmagy_err)
     
     img=epics.caget('PROF:IN10:571:Image:ArrayData')
     nrow = epics.caget('PROF:IN10:571:Image:ArraySize0_RBV')
