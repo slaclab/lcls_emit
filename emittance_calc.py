@@ -295,7 +295,7 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     x = sign*get_quad_field(x)
     x_fit_gauss = sign*get_quad_field(x_fit)
     
-    if yerr is not None:
+    if yerr is not None and yerr.all() > 0:
         abs_sigma = True
         yerr_plot = np.array(yerr/1e-6) # for plotting
     else: 
@@ -303,7 +303,7 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
         yerr_plot = None
         
     # fit just for plotting
-    coefs, cov = curve_fit(func, x, y, sigma=yerr, absolute_sigma=abs_sigma)
+    coefs, cov = curve_fit(func, x, y, sigma=yerr_plot, absolute_sigma=abs_sigma)
     y_fit = np.array(np.polyval(coefs, x_fit_gauss))
 
     plt.errorbar(x, y/1e-6, yerr=yerr_plot, marker="x")
