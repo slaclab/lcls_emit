@@ -220,10 +220,10 @@ def get_updated_beamsizes(quad=quad_act_pv.get(), use_profMon=False, reject_bad_
     f.close()
     return xrms, yrms, xrms_err, yrms_err
 
-def quad_control(val=None, type="get"):
-    if type=="get":
+def quad_control(val=None, action="get"):
+    if action=="get":
         return quad_act_pv.get()
-    elif type=="set":
+    elif action=="set":
         setquad(val)
         return None
     else:

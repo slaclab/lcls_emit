@@ -7,8 +7,12 @@ from scipy.optimize import curve_fit
 # on sim 
 #from beam_io_sim import get_sizes
 # on lcls
-from beam_io import get_updated_beamsizes, quad_control
-get_sizes = get_updated_beamsizes
+# from beam_io import get_updated_beamsizes, quad_control
+# get_sizes = get_updated_beamsizes
+
+# def quad_control(*args, action):
+#     """fn to debug locally"""
+#     return -2.5
 
 # do not display warnings when cov can't be computed
 # this will happen when len(y)<=3 and yerr=0
@@ -47,7 +51,7 @@ def get_k1(g, p):
 def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_points=5, show_plots=False):
     """Fit sizes^2 = c0 + c1*k + c2*k^2
        returns: c0, c1, c2"""
-    sizes = np.array(sizes)
+    sizes, sizes_err = np.array(sizes), np.array(sizes_err)
     if len(sizes)<3:
         print("Less than 3 data points were passed.")
         return np.nan, np.nan, np.nan, np.nan, np.nan
@@ -58,6 +62,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     else:
         w = None
         abs_sigma = False
+
     coefs, cov = curve_fit(func, k, sizes**2, sigma=w, absolute_sigma=abs_sigma)
     
     if axis == 'x':
@@ -69,7 +74,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     
 
     # FOR DEBUGGING ONLY
-    #plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=False, show_plots=show_plots)  
+    #plot_fit(k, sizes, xfit, axis=axis, yerr=sizes_err, save_plot=False, show_plots=show_plots)  
     
     if adapt_ranges:
         try:
@@ -88,8 +93,9 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
             plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)
         except ConcaveFitError:
             print("Error: Cannot adapt quad ranges due to concave poly. Returning original fit.")
-            plot_fit(k, sizes, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)     
+            plot_fit(k, sizes, axis=axis, yerr=sizes_err, save_plot=True, show_plots=show_plots)     
     else:
+        #plot_fit(k, sizes, xfit, axis=axis, yerr=sizes_err, save_plot=True, show_plots=show_plots)
         plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)
   
     if np.isnan(coefs).any() or np.isnan(cov).any():
@@ -148,12 +154,12 @@ def quad_drift_mat2(kL, *, Ltot=d+l,  Lquad=l):
     """
     Composite [quad, drift] 2x2 transfer matrix. 
     """
-    
+ 
     Ldrift = Ltot - Lquad
     
     return drift_mat2(Ldrift) @ quad_mat2(kL, Lquad)
 
-def get_bmag(coefs, coefs_err, k, emit, emit_err, k, axis):
+def get_bmag(coefs, coefs_err, k, emit, emit_err, axis):
     """Calculates Bmag from calculated emittance
     and from initial Twiss at OTR2: HARDCODED from Matlab GUI"""
     # HARDCODED INIT TWISS PARAMS
@@ -183,13 +189,20 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, k, axis):
     sig_12_screen = []
     sig_22_screen = []
 
-    kLlist = k*l
-    for kL in kLlist:
-        mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
-        sigma1 = propagate_sigma(sigma0, mat2)
-        sig_11_screen.append(sigma1[0,0])
-        sig_12_screen.append(sigma1[0,1])        
-        sig_22_screen.append(sigma1[1,1])        
+#     kLlist = k*l
+#     for kL in kLlist:
+#         mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
+#         sigma1 = propagate_sigma(sigma0, mat2)
+#         sig_11_screen.append(sigma1[0,0])
+#         sig_12_screen.append(sigma1[0,1])        
+#         sig_22_screen.append(sigma1[1,1])   
+
+    kL = k*l
+    mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
+    sigma1 = propagate_sigma(sigma0, mat2)
+    sig_11_screen.append(sigma1[0,0])
+    sig_12_screen.append(sigma1[0,1])        
+    sig_22_screen.append(sigma1[1,1])   
 
     sig_11_screen = np.array(sig_11_screen)
     sig_12_screen = np.array(sig_12_screen)
@@ -202,7 +215,7 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, k, axis):
     # Form bmag
     gamma0 = (1+alpha0**2)/beta0
     bmag = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
-    bmag = np.min(bmag) # if more than one k val
+    bmag = np.min(bmag) # if more than one k val, TODO: is this ever needed?
         
     # ignoring correlations
     # TODO: check error propagation for bmag
@@ -222,7 +235,7 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     beta = np.sqrt(1-1/gamma**2)
 
     # get init quad value in kGauss
-    init_quad = quad_control(type="get")
+    init_quad = quad_control(action="get")
     init_k = get_k1(get_gradient(init_quad), beta*energy)
 
     kx = get_k1(get_gradient(xrange), beta*energy)
@@ -240,8 +253,8 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
         save_data(timestamp,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,xrms,yrms,kx,ky,str(adapt_ranges))
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     
-    bmagx, bmagx_err = get_bmag(coefsx, coefsx_err, kx_final, emitx, emitx_err, init_k, axis='x')
-    bmagy, bmagy_err = get_bmag(coefsy, coefsy_err, ky_final, emity, emity_err, init_k, axis='y')
+    bmagx, bmagx_err = get_bmag(coefsx, coefsx_err, init_k, emitx, emitx_err, axis='x')
+    bmagy, bmagy_err = get_bmag(coefsy, coefsy_err, -init_k, emity, emity_err, axis='y')
         
     norm_emitx = emitx*gamma*beta
     norm_emitx_err = emitx_err*gamma*beta
@@ -258,7 +271,7 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     print(f"bmagx_err: {bmagx_err:.2f}, bmagy_err: {bmagy_err:.2f}")
 
     # return quad to init value TODO: do this at every return statement
-    quad_control(init_quad, type="set")
+    quad_control(init_quad, action="set")
 
     return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err
 
@@ -274,13 +287,15 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     
     if yerr is not None and yerr.all() > 0:
         abs_sigma = True
-        yerr_plot = np.array(yerr/1e-6) # for plotting
+        yerr_plot = np.array(yerr/1e-6) # um for plotting
     else: 
         abs_sigma = False
         yerr_plot = None
 
+    #coefs, cov = curve_fit(func, k, sizes**2, sigma=w, absolute_sigma=abs_sigma)
+    
     # fit just for plotting
-    coefs, cov = curve_fit(func, x, y, sigma=yerr, absolute_sigma=abs_sigma)
+    coefs, cov = curve_fit(func, x, y, sigma=yerr_plot, absolute_sigma=abs_sigma)
     y_fit = np.array(np.polyval(coefs, x_fit_gauss))
 
     plt.errorbar(x, y/1e-6, yerr=yerr_plot, marker="x")
@@ -439,7 +454,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=0.135, nu
     # fit
     coefs, cov = curve_fit(func, x_fine_fit, fine_fit_sizes**2, sigma=w, absolute_sigma=abs_sigma)
     xfit = np.linspace(np.min(x_fine_fit),np.max(x_fine_fit), 100)
-    plot_fit(x_fine_fit, fine_fit_sizes, xfit, yerr=fine_fit_sizes_err, axis=axis,\
+    plot_fit(x_fine_fit, fine_fit_sizes, xfit, axis=axis, yerr=fine_fit_sizes_err,\
              save_plot=save_plot, show_plots=show_plots, title_suffix=" - adapted range")
     return coefs, cov, x_fine_fit
 
