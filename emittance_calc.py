@@ -7,7 +7,7 @@ from scipy.optimize import curve_fit
 # on sim 
 #from beam_io_sim import get_sizes
 # on lcls
-from beam_io import get_beamsizes
+from beam_io import get_beamsizes, quad_control
 get_sizes = get_beamsizes
 import json
 from os.path import exists
@@ -214,13 +214,20 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     sig_12_screen = []
     sig_22_screen = []
     
-    kLlist = k*l
-    for kL in kLlist:
-        mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
-        sigma1 = propagate_sigma(sigma0, mat2)
-        sig_11_screen.append(sigma1[0,0])
-        sig_12_screen.append(sigma1[0,1])        
-        sig_22_screen.append(sigma1[1,1])        
+#     kLlist = k*l
+#     for kL in kLlist:
+#         mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
+#         sigma1 = propagate_sigma(sigma0, mat2)
+#         sig_11_screen.append(sigma1[0,0])
+#         sig_12_screen.append(sigma1[0,1])        
+#         sig_22_screen.append(sigma1[1,1])   
+
+    kL = k*l
+    mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
+    sigma1 = propagate_sigma(sigma0, mat2)
+    sig_11_screen.append(sigma1[0,0])
+    sig_12_screen.append(sigma1[0,1])        
+    sig_22_screen.append(sigma1[1,1])         
 
     sig_11_screen = np.array(sig_11_screen)
     sig_12_screen = np.array(sig_12_screen)
@@ -233,10 +240,10 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     # Form bmag
     gamma0 = (1+alpha0**2)/beta0
     bmag = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
-    bmag = np.min(bmag) # TODO: FIT AND RETURN MIN OF FIT INSTEAD (if not getting at given Q value)
+    bmag = np.min(bmag) # if more than one k val, TODO: is this ever needed?
         
     # ignoring correlations
-    # TODO: check error propagation for bmag
+    # TODO: check error propagation for bmag (incl. correlations)
     bmag_err = bmag * np.sqrt((c2_err/c2)**2 + (c1_err/c1)**2 + (c0_err/c0)**2)
     return bmag, bmag_err
 
@@ -250,6 +257,10 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     mkdir_p("plots")
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
+    
+    # get init quad value in kGauss
+    init_quad = quad_control(action="get")
+    init_k = get_k1(get_gradient(init_quad), beta*energy)
 
     kx = get_k1(get_gradient(xrange), beta*energy)
     ky = get_k1(get_gradient(yrange), beta*energy)
@@ -266,8 +277,8 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
         save_data(timestamp,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,xrms,yrms,kx,ky,str(adapt_ranges))
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     
-    bmagx, bmagx_err = get_bmag(coefsx, coefsx_err, kx_final, emitx, emitx_err, axis='x')
-    bmagy, bmagy_err = get_bmag(coefsy, coefsy_err, ky_final, emity, emity_err, axis='y')    
+    bmagx, bmagx_err = get_bmag(coefsx, coefsx_err, init_k, emitx, emitx_err, axis='x')
+    bmagy, bmagy_err = get_bmag(coefsy, coefsy_err, -init_k, emity, emity_err, axis='y')    
         
     norm_emitx = emitx*gamma*beta
     norm_emitx_err = emitx_err*gamma*beta
@@ -283,6 +294,9 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     print(f"bmagx: {bmagx:.2f}, bmagy: {bmagy:.2f}")
     print(f"bmagx_err: {bmagx_err:.2f}, bmagy_err: {bmagy_err:.2f}")
     
+    # return quad to init value TODO: do this at every return statement (e.g. when it fails and returns nans)
+    quad_control(init_quad, action="set")
+    
     return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err
 
 def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, title_suffix=""):
@@ -295,7 +309,7 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     x = sign*get_quad_field(x)
     x_fit_gauss = sign*get_quad_field(x_fit)
     
-    if yerr is not None:
+    if yerr is not None and yerr.all() > 0:
         abs_sigma = True
         yerr_plot = np.array(yerr/1e-6) # for plotting
     else: 
@@ -303,7 +317,7 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
         yerr_plot = None
         
     # fit just for plotting
-    coefs, cov = curve_fit(func, x, y, sigma=yerr, absolute_sigma=abs_sigma)
+    coefs, cov = curve_fit(func, x, y, sigma=yerr_plot, absolute_sigma=abs_sigma)
     y_fit = np.array(np.polyval(coefs, x_fit_gauss))
 
     plt.errorbar(x, y/1e-6, yerr=yerr_plot, marker="x")
@@ -416,9 +430,11 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         dist_min = np.abs(x[np.argmin(y)]-np.min(roots))
         dist_max = np.abs(x[np.argmin(y)]-np.max(roots))
         if dist_min<dist_max:
-            x_fine_fit = np.linspace(np.min(roots), np.max(roots)-4, num_points)
+            diff = dist_max-dist_min
+            x_fine_fit = np.linspace(np.min(roots), np.max(roots)-diff, num_points)
         elif dist_min>dist_max:
-            x_fine_fit = np.linspace(np.min(roots)+4, np.max(roots), num_points)
+            diff = dist_min-dist_max
+            x_fine_fit = np.linspace(np.min(roots)+diff, np.max(roots), num_points)
         else:
             x_fine_fit = np.linspace(np.min(roots)+2, np.max(roots)-2, num_points)
             

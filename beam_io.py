@@ -127,7 +127,16 @@ if ~file_exists:
 #def setquad(value):
 #    """Sets Q525 to new scan value"""
 #    meas_cntrl_pv.put(value)
-    
+
+# def quad_control(val=None, action="get"):
+#     """Function called by emit calc to save/set quad"""
+#     if action == "get":
+#         return meas_read_pv.get()
+#     elif action == "set":
+#         setquad(val)
+#         return None
+#     else:
+#         raise ValueError("Invalid quad function")
 
 def savesummary(beamsizes,timestamp=(datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")):
         """Saves summary info for beamsize fits"""
