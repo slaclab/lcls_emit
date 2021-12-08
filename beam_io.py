@@ -143,6 +143,7 @@ def get_beamsize_inj(set_list, quad=meas_input_pv.get(), use_profMon=False):
     """Get beamsize fn that changes upstream cu injector and returns xrms and yrms in [m]"""   
     setinjector(set_list)
     setquad(quad)
+    time.sleep(3)
     beamsize = get_beamsizes(use_profMon=use_profMon)
     return np.array([beamsize[0], beamsize[1]])
 

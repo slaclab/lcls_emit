@@ -3,6 +3,7 @@ import numpy as np
 import warnings
 import sys, os, errno
 import scipy
+import time
 from scipy.optimize import curve_fit
 # on sim 
 #from beam_io_sim import get_sizes
@@ -244,6 +245,7 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     gamma0 = (1+alpha0**2)/beta0
     bmag = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
     bmag = np.min(bmag) # TODO: FIT AND RETURN MIN OF FIT INSTEAD (if not getting at given Q value)
+    print("Q525 val at min is ", -1*np.abs(get_quad_field(k[np.argmin(bmag)]))," kG")
         
     # ignoring correlations
     # TODO: check error propagation for bmag
@@ -377,11 +379,11 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     if axis == 'x':
         min_x, max_x = np.min(x), 0
         # quad ranges 0 to -10 kG for scanning
-        min_x_range, max_x_range = -20.0, -13.0
+        min_x_range, max_x_range = -14.4, -2.06
     elif axis == 'y':
         min_x, max_x = np.min(x), np.max(x)
         # quad ranges 0 to -10 kG for scanning
-        min_x_range, max_x_range = 13, 20.0
+        min_x_range, max_x_range = 2.06, 14.4
         
     c2, c1, c0 = fit_coefs
     
@@ -391,7 +393,9 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         concave_function = False
     
     # find range within 2-3x the focus size 
-    y_lim = np.min(np.polyval(fit_coefs, x_fit))*1.3
+#    y_lim = np.min(np.polyval(fit_coefs, x_fit))*1.3
+    y_lim = np.min(y)*1.2
+
     if y_lim<0:
         print(f"{axis} axis: min. of poly fit is negative. Setting it to 0.")
         y_lim = np.mean(y**2)/5
@@ -456,6 +460,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     fine_fit_sizes, fine_fit_sizes_err = [], []
     for ele in x_fine_fit:
         setquad(sign*get_quad_field(ele))
+        time.sleep(3)
         beamsizes = get_sizes()
         #print(beamsizes)
         fine_fit_sizes.append(beamsizes[ax_idx_size])
