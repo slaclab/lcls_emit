@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import json
 
-rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+#rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+rootp = '/home/physics/wdn/proj/emittance-bax/src/lcls/injector_surrogate/'
 
 #load info about where to put saving of raw images and summaries; make directories if needed and start headings
 savepaths = json.load(open(rootp+'config_files/savepaths.json'))

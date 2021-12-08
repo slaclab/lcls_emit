@@ -23,7 +23,7 @@ isotime()
 # this will happen when len(y)<=3 and yerr=0
 warnings.simplefilter('ignore', scipy.optimize.OptimizeWarning)
 
-rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+rootp = '/home/physics/wdn/proj/emittance-bax/src/lcls/injector_surrogate/'
 
 beamline_info = json.load(open(rootp+'config_files/beamline_info.json'))
 
