@@ -16,7 +16,8 @@ except:
     print("did not import epics")
 
 ##################################
-rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+#rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+rootp = '/home/physics/wdn/proj/emittance-bax/src/lcls/injector_surrogate/'
 
 #load image processing setting info
 im_proc = json.load(open(rootp+'config_files/img_proc.json'))
@@ -43,12 +44,10 @@ isotime()
 
 #load info about PVs used in measurements (e.g. quad scan PV, image PV)
 meas_pv_info = json.load(open(rootp+'config_files/meas_pv_info.json'))
-
 pv_savelist = json.load(open(rootp+'config_files/save_scalar_pvs.json'))
 
-
-
-resolution = epics.caget('PROF:IN10:571:RESOLUTION')*10**-6#12.23*1e-6#PV(meas_pv_info['diagnostic']['pv']['resolution'])*1e-6 #12.23*1e-6 # in meters for emittance calc
+#resolution = epics.caget('PROF:IN10:571:RESOLUTION')*10**-6#12.23*1e-6#PV(meas_pv_info['diagnostic']['pv']['resolution'])*1e-6 #12.23*1e-6 # in meters for emittance calc
+resolution = epics.caget('OTRS:IN20:571:RESOLUTION')*10**-6#12.23*1e-6#PV(meas_pv_info['diagnostic']['pv']['resolution'])*1e-6 #12.23*1e-6 # in meters for emittance calc
 
 online=True
 if online:
@@ -62,10 +61,15 @@ if online:
     meas_cntrl_pv =  PV(meas_pv_info['meas_device']['pv']['cntrl'])
     meas_read_pv =  PV(meas_pv_info['meas_device']['pv']['read'])
 
-
 #load info about settings to optimize
 opt_pv_info = json.load(open(rootp+'config_files/opt_pv_info.json'))
 opt_pvs = opt_pv_info['opt_vars']
+
+if online:
+    
+    sol_cntrl_pv =  PV(opt_pvs[0])
+    cq_cntrl_pv =  PV(opt_pvs[1])
+    sq_cntrl_pv =  PV(opt_pvs[2])
 
 
 #load info about where to put saving of raw images and summaries; make directories if needed and start headings
@@ -125,21 +129,23 @@ if not file_exists:
 #resolution = caget(pv_info['device']['OTR2']['resolution'])*1e-6 # in meters for emittance calc
 
 ## I/O FUNCTIONS
-#def get_beamsize_inj(set_list_pv,set_list_values, quad=meas_input_pv.get(), use_profMon=False):
-#    """Get beamsize fn that changes upstream cu injector
-#    and returns xrms and yrms in [m]"""
-#    setinjector(varx,vary,varz)
-#    beamsize = get_updated_beamsizes(quad, use_profMon=use_profMon)
-#    return np.array([beamsize[0], beamsize[1]])
-
-#def setinjector(set_list):
-#    varx_pv.put(varx)
-#    vary_pv.put(vary)
-#    varz_pv.put(varz)
+#def get_beamsize_inj(set_list_pv, set_list_values, quad=meas_input_pv.get(), use_profMon=False):
+def setinjector(set_list):
+    sol_cntrl_pv.put(set_list[0])
+    cq_cntrl_pv.put(set_list[1])
+    sq_cntrl_pv.put(set_list[2])
     
 def setquad(value):
     """Sets Q525 to new scan value"""
     meas_cntrl_pv.put(value)
+    
+def get_beamsize_inj(set_list, quad=meas_input_pv.get(), use_profMon=False):
+    """Get beamsize fn that changes upstream cu injector and returns xrms and yrms in [m]"""   
+    setinjector(set_list)
+    setquad(quad)
+    beamsize = get_beamsizes(use_profMon=use_profMon)
+    return np.array([beamsize[0], beamsize[1]])
+
     
 def quad_control(val=None, action="get"):
     if action == "get":
@@ -419,7 +425,6 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
 
     return xrms, yrms, xrms_err, yrms_err
 
-
 def numpy_save(timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['raw_saves']):
     
     
@@ -432,17 +437,11 @@ def numpy_save(timestamp=False,savelist = pv_savelist['scalars'],path =savepaths
         x.append(ts)
     
     
-    img=epics.caget('PROF:IN10:571:Image:ArrayData')
-    nrow = epics.caget('PROF:IN10:571:Image:ArraySize0_RBV')
-    ncol = epics.caget('PROF:IN10:571:Image:ArraySize1_RBV')    
+    img=epics.caget('OTRS:IN20:571:IMAGE')
+    nrow = epics.caget('OTRS:IN20:571:ROI_XNP')
+    ncol = epics.caget('OTRS:IN20:571:ROI_YNP')    
 
-    res = epics.caget('PROF:IN10:571:RESOLUTION')
-    
-    nrow1 = caget("CAMR:LT10:900:Image:ArraySize0_RBV")
-    ncol1 = caget("CAMR:LT10:900:Image:ArraySize1_RBV")
-
-    resolution1 = caget("CAMR:LT10:900:RESOLUTION")
-    im1 =caget('CAMR:LT10:900:Image:ArrayData')
+    res = epics.caget('OTRS:IN20:571:RESOLUTION')
     
 
     np.save(path+ts+'_571_img_.npy',img.reshape((ncol,nrow)))
@@ -450,8 +449,39 @@ def numpy_save(timestamp=False,savelist = pv_savelist['scalars'],path =savepaths
     
     np.save(path+ts+'_x_.npy',np.array(x))
 
-    np.save(path+ts+'_vcc_img_.npy',im1.reshape((ncol1,nrow1)))
-    np.save(path+ts+'_vcc_res_.npy',np.array(resolution1))
+    
+# def numpy_save(timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['raw_saves']):
+    
+    
+#     ts = isotime()
+#     x = epics.caget_many(savelist)
+#     x.append(ts)
+#     if timestamp:
+#         x.append(timestamp)
+#     else:
+#         x.append(ts)
+    
+    
+#     img=epics.caget('PROF:IN10:571:Image:ArrayData')
+#     nrow = epics.caget('PROF:IN10:571:Image:ArraySize0_RBV')
+#     ncol = epics.caget('PROF:IN10:571:Image:ArraySize1_RBV')    
+
+#     res = epics.caget('PROF:IN10:571:RESOLUTION')
+    
+#     nrow1 = caget("CAMR:LT10:900:Image:ArraySize0_RBV")
+#     ncol1 = caget("CAMR:LT10:900:Image:ArraySize1_RBV")
+
+#     resolution1 = caget("CAMR:LT10:900:RESOLUTION")
+#     im1 =caget('CAMR:LT10:900:Image:ArrayData')
+    
+
+#     np.save(path+ts+'_571_img_.npy',img.reshape((ncol,nrow)))
+#     np.save(path+ts+'_571_res_.npy',np.array(res))
+    
+#     np.save(path+ts+'_x_.npy',np.array(x))
+
+#     np.save(path+ts+'_vcc_img_.npy',im1.reshape((ncol1,nrow1)))
+#     np.save(path+ts+'_vcc_res_.npy',np.array(resolution1))
 
 
 
