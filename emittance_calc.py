@@ -436,9 +436,11 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         dist_min = np.abs(x[np.argmin(y)]-np.min(roots))
         dist_max = np.abs(x[np.argmin(y)]-np.max(roots))
         if dist_min<dist_max:
-            x_fine_fit = np.linspace(np.min(roots), np.max(roots)-4, num_points)
+            diff = dist_max-dist_min
+            x_fine_fit = np.linspace(np.min(roots), np.max(roots)-diff, num_points)
         elif dist_min>dist_max:
-            x_fine_fit = np.linspace(np.min(roots)+4, np.max(roots), num_points)
+            diff = dist_min-dist_max
+            x_fine_fit = np.linspace(np.min(roots)+diff, np.max(roots), num_points)
         else:
             x_fine_fit = np.linspace(np.min(roots)+2, np.max(roots)-2, num_points)
             
