@@ -510,18 +510,15 @@ def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,b
     x.append(norm_emity_err)
     x.append(bmagx_err)
     x.append(bmagy_err)
-    
-    img=epics.caget('PROF:IN10:571:Image:ArrayData')
-    nrow = epics.caget('PROF:IN10:571:Image:ArraySize0_RBV')
-    ncol = epics.caget('PROF:IN10:571:Image:ArraySize1_RBV')    
 
-    res = epics.caget('PROF:IN10:571:RESOLUTION')
     
-    nrow1 = caget("CAMR:LT10:900:Image:ArraySize0_RBV")
-    ncol1 = caget("CAMR:LT10:900:Image:ArraySize1_RBV")
+  
+    
+    img=epics.caget('OTRS:IN20:571:IMAGE')
+    nrow = epics.caget('OTRS:IN20:571:ROI_XNP')
+    ncol = epics.caget('OTRS:IN20:571:ROI_YNP')    
 
-    resolution1 = caget("CAMR:LT10:900:RESOLUTION")
-    im1 =caget('CAMR:LT10:900:Image:ArrayData')
+    res = epics.caget('OTRS:IN20:571:RESOLUTION')
     
 
     np.save(path+ts+'_571_img_.npy',img.reshape((ncol,nrow)))
@@ -529,9 +526,7 @@ def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,b
     
     np.save(path+ts+'_x_.npy',np.array(x))
 
-    np.save(path+ts+'_vcc_img_.npy',im1.reshape((ncol1,nrow1)))
-    np.save(path+ts+'_vcc_res_.npy',np.array(resolution1))
-
+    
 def save_data(timestamp, nex, ney, bmx, bmy, nex_err, ney_err, bmx_err, bmy_err, xsizes, ysizes, kx, ky, adapted):
     f= open(savepaths['summaries']+"emit_calc_log.csv", "a+")
     f.write(f"{timestamp},{nex},{ney},{bmx},{bmy},{xsizes},{ysizes},{kx},{ky},{adapted}\n")
