@@ -6,10 +6,9 @@ import scipy
 import time
 from scipy.optimize import curve_fit
 # on sim 
-#from beam_io_sim import get_sizes
+#from beam_io_sim import get_beamsizes
 # on lcls
 from beam_io import get_beamsizes, setquad
-get_sizes = get_beamsizes
 import json
 from os.path import exists
 
@@ -463,7 +462,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     for ele in x_fine_fit:
         setquad(sign*get_quad_field(ele))
         time.sleep(3)
-        beamsizes = get_sizes()
+        beamsizes = get_beamsizes()
         #print(beamsizes)
         fine_fit_sizes.append(beamsizes[ax_idx_size])
         fine_fit_sizes_err.append(beamsizes[ax_idx_err])

@@ -129,7 +129,6 @@ if not file_exists:
 #resolution = caget(pv_info['device']['OTR2']['resolution'])*1e-6 # in meters for emittance calc
 
 ## I/O FUNCTIONS
-#def get_beamsize_inj(set_list_pv, set_list_values, quad=meas_input_pv.get(), use_profMon=False):
 def setinjector(set_list):
     sol_cntrl_pv.put(set_list[0])
     cq_cntrl_pv.put(set_list[1])
@@ -138,7 +137,8 @@ def setinjector(set_list):
 def setquad(value):
     """Sets Q525 to new scan value"""
     meas_cntrl_pv.put(value)
-    
+
+#def get_beamsize_inj(set_list_pv, set_list_values, quad=meas_input_pv.get(), use_profMon=False):
 def get_beamsize_inj(set_list, quad=meas_input_pv.get(), use_profMon=False):
     """Get beamsize fn that changes upstream cu injector and returns xrms and yrms in [m]"""   
     setinjector(set_list)
@@ -408,7 +408,6 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
                 yamp = beamsizes[5]  
                 #im = beamsizes[6]
                 
-        
 
                 # convert to meters
                 xrms = xrms*resolution 
@@ -436,15 +435,15 @@ def numpy_save(timestamp=False,savelist = pv_savelist['scalars'],path =savepaths
         x.append(ts)
     
     
-    img=epics.caget('OTRS:IN20:571:IMAGE')
+    img = epics.caget('OTRS:IN20:571:IMAGE')
     nrow = epics.caget('OTRS:IN20:571:ROI_XNP')
     ncol = epics.caget('OTRS:IN20:571:ROI_YNP')    
 
     res = epics.caget('OTRS:IN20:571:RESOLUTION')
     
 
-    np.save(path+ts+'_571_img_.npy',img.reshape((ncol,nrow)))
-    np.save(path+ts+'_571_res_.npy',np.array(res))
+    np.save(path+ts+'_571_img_.npy', img.reshape((ncol, nrow)))
+    np.save(path+ts+'_571_res_.npy', np.array(res))
     
     np.save(path+ts+'_x_.npy',np.array(x))
 
