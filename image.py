@@ -32,15 +32,27 @@ class Image:
                 
     def reshape_im(self, im = None):
         """Reshapes flattened OTR image to 2D array"""
-        self.proc_image = self.flat_image.reshape(self.ncol,self.nrow)
+        self.proc_image = self.flat_image.reshape(self.ncol, self.nrow)
         return self.proc_image
     
     def subtract_bg(self):
         """Subtracts bg image"""
         if self.bg_image is not None:
-            self.bg_image = self.bg_image.reshape(self.ncol,self.nrow)
+
+            if self.bg_image.endswith('.npy'):
+                self.bg_image = np.load(self.bg_image)
+            else:
+                print('Error in load bg_image: not .npy format.')
+                return self.proc_image
+
+            self.bg_image = self.bg_image.reshape(self.ncol, self.nrow)
             if self.proc_image.shape == self.bg_image.shape:
                 self.proc_image = self.proc_image - self.bg_image
+                # some pixels may end up with negative data
+                self.proc_image = [ele if ele >= 0 else 0 for ele in self.proc_image]
+            else:
+                print("Beam image and background image are not the same shape.")
+
         return self.proc_image
 
     def get_im_projection(self, subtract_baseline=True):
@@ -50,8 +62,8 @@ class Image:
         if subtract_baseline:
             self.x_proj = self.x_proj - np.mean(self.x_proj[0:self.offset])
             self.y_proj = self.y_proj - np.mean(self.y_proj[0:self.offset])
-        self.x_proj = np.clip(self.x_proj,-500,np.inf)
-        self.y_proj = np.clip(self.y_proj,3000,np.inf)
+        self.x_proj = np.clip(self.x_proj, -500, np.inf)
+        self.y_proj = np.clip(self.y_proj, 3000, np.inf)
         return self.x_proj, self.y_proj    
             
     def dispatch(self, name, *args, **kwargs):

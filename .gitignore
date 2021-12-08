@@ -1,5 +1,6 @@
 notebooks/dev/
 saved_images/
+plots/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

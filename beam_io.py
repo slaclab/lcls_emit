@@ -22,7 +22,7 @@ rootp = '/home/physics/wdn/proj/emittance-bax/src/lcls/injector_surrogate/'
 #load image processing setting info
 im_proc = json.load(open(rootp+'config_files/img_proc.json'))
 subtract_bg = im_proc['subtract_bg']
-bg_image = im_proc['background_im']
+bg_image = im_proc['background_im'] #specify path to bg im in json file
 use_roi = im_proc['use_roi']
 roi_xmin = im_proc['roi']['xmin']
 roi_ymin = im_proc['roi']['ymin']
@@ -392,8 +392,6 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
             if use_profMon:
                 xrms, xrms_err = x_size_pv.get()*1e-6, 0 # in meters
                 yrms, yrms_err = y_size_pv.get()*1e-6, 0 # in meters
-                
-                count = count + 1
 
             else:
                 if post:
