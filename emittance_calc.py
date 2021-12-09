@@ -23,7 +23,7 @@ isotime()
 # this will happen when len(y)<=3 and yerr=0
 warnings.simplefilter('ignore', scipy.optimize.OptimizeWarning)
 
-rootp = '/home/physics/wdn/proj/emittance-bax/src/lcls/injector_surrogate/'
+rootp =  '/home/physics/edelen/20211209_Injector_MD/'
 
 beamline_info = json.load(open(rootp+'config_files/beamline_info.json'))
 
@@ -89,6 +89,22 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     """Fit sizes^2 = c0 + c1*k + c2*k^2
        returns: c0, c1, c2"""
     sizes = np.array(sizes)
+    
+    
+    cutoff = 1.7
+    print(k)
+    print(sizes)
+    idx = np.argwhere(sizes<cutoff*np.min(sizes)).flatten()
+    print(idx)
+    
+    sizes = sizes[idx]
+    k = k[idx]
+    
+    print(k)
+    print(sizes)
+    
+    
+    
     if len(sizes)<3:
         print("Less than 3 data points were passed.")
         return np.nan, np.nan, np.nan, np.nan, np.nan
@@ -110,7 +126,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     
 
     # FOR DEBUGGING ONLY
-    #plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=False, show_plots=show_plots)  
+    plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)  
     
     if adapt_ranges:
         try:
@@ -134,6 +150,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
         plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)
   
     if np.isnan(coefs).any() or np.isnan(cov).any():
+        print('error coeff:',coef, cov)
         return np.nan, np.nan, np.nan, np.nan, np.nan 
         
     # poly.poly: return c0,c1,c2
@@ -151,6 +168,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
             emit_err = np.sqrt(np.matmul(np.matmul(emit_gradient.T, cov), emit_gradient))
             return emit, emit_err[0][0], coefs, coefs_err, k
     except RuntimeWarning:
+        print('error:', emit2)
         return np.nan, np.nan, np.nan, np.nan, np.nan 
     
 def propagate_sigma(sigma_mat2, mat2):
@@ -361,6 +379,19 @@ def get_quad_field(k, energy=energy, l=l):
 def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, num_points=5, save_plot=False, show_plots=True):
     """Returns new scan quad values if called without initial fit coefs"""
     """Returns new coefs if called from fit_sigma with initial fit coefs"""
+    cutoff = 1.7
+    print(x)
+    print(y)
+    idx = np.argwhere(y<cutoff*np.min(y)).flatten()
+    print(idx)
+    
+    x = x[idx]
+    y = y[idx]
+    
+    
+    print('x',x)
+    print('y',y)
+    
     if w is None:
         abs_sigma = False
     else: 
@@ -403,13 +434,16 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         concave_function = False
     
     # find range within 2-3x the focus size 
-#    y_lim = np.min(np.polyval(fit_coefs, x_fit))*1.3
-    y_lim = np.min(y)*1.2
+    y_lim = np.min(np.polyval(fit_coefs, x_fit))*cutoff
+    print('ylm1',y_lim)
+    #y_lim = np.min(y**2)*1.5
+    #print('ylm1',y_lim)
 
     if y_lim<0:
         print(f"{axis} axis: min. of poly fit is negative. Setting it to 0.")
         y_lim = np.mean(y**2)/5
     roots = np.roots((c2, c1, c0-y_lim))
+    print('roots',roots)
     # Flag bad fit with complex roots
     if np.iscomplex(roots).any():
         print("Cannot adapt quad ranges, complex root encountered.")
