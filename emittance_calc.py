@@ -411,9 +411,9 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         roots[np.argmax(roots)] = max_x_range
     # have at least 3 scanning points within roots
     range_fit = np.max(roots)-np.min(roots)
-    if range_fit<2:
-        # need at least 3 points for polynomial fit within a range to see beamsize changes
-        x_fine_fit = np.linspace(np.min(roots)-1.5, np.max(roots)+1.5, num_points)
+#     if range_fit<2:
+#         # need at least 3 points for polynomial fit within a range to see beamsize changes
+#         x_fine_fit = np.linspace(np.min(roots)-1.5, np.max(roots)+1.5, num_points)
         
     if concave_function:
         print("Adjusting concave poly.")
@@ -425,23 +425,24 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
             x_max_concave = min_x_range
         else:
             x_max_concave = max_x_range
-        if (x_max_concave-x_min_concave)>8:
-            # if range is too big (>8 1/m^2), narrow it down on the larger side
+        if (x_max_concave-x_min_concave)>(max_x_range-min_x_range):
+            # if range is too big (in 1/m^2), narrow it down on the larger side
             x_min_concave = x_min_concave - 4        #-9
         x_fine_fit = np.linspace(x_min_concave, x_max_concave, num_points)
         
-    elif (np.max(roots)-np.min(roots))>8:
-        # need to concentrate around min!
-        dist_min = np.abs(x[np.argmin(y)]-np.min(roots))
-        dist_max = np.abs(x[np.argmin(y)]-np.max(roots))
-        if dist_min<dist_max:
-            diff = dist_max-dist_min
-            x_fine_fit = np.linspace(np.min(roots), np.max(roots)-diff, num_points)
-        elif dist_min>dist_max:
-            diff = dist_min-dist_max
-            x_fine_fit = np.linspace(np.min(roots)+diff, np.max(roots), num_points)
-        else:
-            x_fine_fit = np.linspace(np.min(roots)+2, np.max(roots)-2, num_points)
+    elif (np.max(roots)-np.min(roots))>(max_x_range-min_x_range):
+#         # need to concentrate around min!
+#         dist_min = np.abs(x[np.argmin(y)]-np.min(roots))
+#         dist_max = np.abs(x[np.argmin(y)]-np.max(roots))
+#         if dist_min<dist_max:
+#             diff = dist_max-dist_min
+#             x_fine_fit = np.linspace(np.min(roots), np.max(roots)-diff, num_points)
+#         elif dist_min>dist_max:
+#             diff = dist_min-dist_max
+#             x_fine_fit = np.linspace(np.min(roots)+diff, np.max(roots), num_points)
+#         else:
+#             x_fine_fit = np.linspace(np.min(roots)+2, np.max(roots)-2, num_points)
+        x_fine_fit = np.linspace(min_x_range, max_x_range, num_points)
             
     else:
         x_fine_fit = np.linspace(roots[0], roots[1], num_points)
