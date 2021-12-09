@@ -350,7 +350,7 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
                 
                 count = count + 1
 
-            if ~use_profMon:
+            if not use_profMon:
                 #if post:
                 #    beamsizes = getbeamsizes_from_img(post = post)
                 #:
