@@ -9,11 +9,8 @@ import matplotlib.pyplot as plt
 from image import Image
 from os.path import exists
 
-try:
-    from epics import caget, caput, PV
-    import epics
-except:
-    print("did not import epics")
+from epics import caget, caput, PV
+import epics
 
 ##################################
 #rootp = '/home/fphysics/edelen/sw/lcls_emit/'
@@ -33,8 +30,8 @@ n_acquire = im_proc['n_to_acquire']
 
 amp_threshold_x = 100 #im_proc['amp_threshold']#1500 
 amp_threshold_y = 200
-min_sigma = 2.0#im_proc['min_sigma']#1.5 # noise
-max_sigma = 800#im_proc['max_sigma']#40 # large/diffuse beam
+# min_sigma = 2.0#im_proc['min_sigma']#1.5 # noise
+# max_sigma = 800#im_proc['max_sigma']#40 # large/diffuse beam
 max_samples = im_proc['max_samples']#3 # how many times to sample bad beam
 
 #remove hardcoding
@@ -50,7 +47,6 @@ isotime()
 meas_pv_info = json.load(open(rootp+'config_files/meas_pv_info.json'))
 pv_savelist = json.load(open(rootp+'config_files/save_scalar_pvs.json'))
 
-#resolution = epics.caget('PROF:IN10:571:RESOLUTION')*10**-6#12.23*1e-6#PV(meas_pv_info['diagnostic']['pv']['resolution'])*1e-6 #12.23*1e-6 # in meters for emittance calc
 resolution = epics.caget('OTRS:IN20:571:RESOLUTION')*10**-6#12.23*1e-6#PV(meas_pv_info['diagnostic']['pv']['resolution'])*1e-6 #12.23*1e-6 # in meters for emittance calc
 
 online=True
@@ -116,21 +112,6 @@ if not file_exists:
     f.write(f"{'timestamp'},{'varx_cur'},{'vary_cur'},{'varz_cur'},{'bact_cur'},{'xrms'},{'yrms'},{'xrms_err'},{'yrms_err'}\n")
     f.close()
     
-
-
-#varx_pv =  PV(pv_info['device']['SOL']['SOL121'])
-#vary_pv =  PV(pv_info['device']['QUAD']['Q121'])
-#varz_pv =  PV(pv_info['device']['QUAD']['Q122'])
-
-#varx_act_pv =  PV("SOLN:IN20:121:BACT")
-#vary_act_pv =  PV("QUAD:IN20:121:BACT")
-#varz_act_pv =  PV("QUAD:IN20:122:BACT")
-#quad_act_pv =  PV("QUAD:IN20:525:BACT")
-
-
-# resolution is now set up at top of this file 
-# until a more robust solution is found
-#resolution = caget(pv_info['device']['OTR2']['resolution'])*1e-6 # in meters for emittance calc
 
 ## I/O FUNCTIONS
 def setinjector(set_list):
@@ -322,9 +303,7 @@ def getbeamsizes_from_img(num_images = n_acquire, avg = avg_ims, subtract_bg = s
 
 def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, post = None):
     """Returns xrms, yrms, xrms_err, yrms_err, with options to reject bad beams and use either profmon or image processing"""
-    
-    #time.sleep(3)
-    
+        
     xrms = np.nan
     yrms =  np.nan
     xrms_err =  np.nan
