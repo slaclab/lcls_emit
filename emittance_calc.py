@@ -315,17 +315,17 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     
     if yerr is not None and yerr.all() > 0:
         abs_sigma = True
-        yerr_plot = np.array(yerr/1e-6) # for plotting
+        yerr_plot = np.array(yerr)/1e-6 # for plotting
     else: 
         abs_sigma = False
         yerr_plot = None
         
-    # fit just for plotting
-    coefs, cov = curve_fit(func, x, y, sigma=yerr, absolute_sigma=abs_sigma)
-    y_fit = np.array(np.polyval(coefs, x_fit_gauss))
+    # fit just for plotting in um
+    coefs, cov = curve_fit(func, x, y/1e-6, sigma=yerr_plot, absolute_sigma=abs_sigma)
+    y_fit = np.array(np.polyval(coefs, x_fit_gauss)) # in um
 
     plt.errorbar(x, y/1e-6, yerr=yerr_plot, marker="x")
-    plt.plot(x_fit_gauss, y_fit/1e-6)
+    plt.plot(x_fit_gauss, y_fit)
         
     plt.xlabel(r"B (kG)")
     plt.ylabel(r"sizes ($\mu$m)")
