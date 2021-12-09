@@ -14,7 +14,7 @@ import epics
 
 ##################################
 #rootp = '/home/fphysics/edelen/sw/lcls_emit/'
-rootp = '/home/physics/wdn/proj/emittance-bax/src/lcls/injector_surrogate/'
+rootp = '/home/physics/edelen/20211209_Injector_MD/'
 
 #load image processing setting info
 im_proc = json.load(open(rootp+'config_files/img_proc.json'))
@@ -28,15 +28,12 @@ roi_ymax = im_proc['roi']['ymax']
 avg_ims = im_proc['avg_ims']
 n_acquire = im_proc['n_to_acquire']
 
-amp_threshold_x = 100 #im_proc['amp_threshold']#1500 
-amp_threshold_y = 200
-# min_sigma = 2.0#im_proc['min_sigma']#1.5 # noise
-# max_sigma = 800#im_proc['max_sigma']#40 # large/diffuse beam
+amp_threshold_x = 50 #im_proc['amp_threshold']#1500 
+amp_threshold_y = 50
+min_sigma = 1.0 #im_proc['min_sigma']#1.5 # noise
+max_sigma = 1000 #im_proc['max_sigma']#40 # large/diffuse beam
 max_samples = im_proc['max_samples']#3 # how many times to sample bad beam
 
-#remove hardcoding
-min_sigma=0.000001
-max_sigma=0.004
 
 def isotime():
     return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).astimezone().replace(microsecond=0).isoformat()
@@ -312,6 +309,11 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
     yamp =  np.nan
     beamsizes = [np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]
     im = None
+    
+    
+    #remove hardcoding
+    min_sigma=0.000002
+    max_sigma=0.01
 
     if reject_bad_beam:
 
@@ -332,6 +334,7 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
                 count = count + 1
 
             if not use_profMon:
+                
                 #if post:
                 #    beamsizes = getbeamsizes_from_img(post = post)
                 #:
@@ -373,6 +376,7 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
             if use_profMon:
                 xrms, xrms_err = x_size_pv.get()*1e-6, 0 # in meters
                 yrms, yrms_err = y_size_pv.get()*1e-6, 0 # in meters
+                print("USING PROFMONNNNNNN!!!!")
 
             else:
                 if post:
@@ -396,6 +400,7 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
                 xrms_err = xrms_err*resolution
                 yrms_err = yrms_err*resolution 
 
+
     if save_summary:
         timestamp=(datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
 
@@ -418,7 +423,6 @@ def numpy_save(xrms, yrms, xrms_err, yrms_err, timestamp=False,savelist = pv_sav
     x.append(yrms)
     x.append(xrms_err)
     x.append(yrms_err)
-      
     
     
     img = epics.caget('OTRS:IN20:571:IMAGE')
