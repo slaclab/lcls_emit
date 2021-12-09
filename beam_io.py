@@ -399,12 +399,12 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
     if save_summary:
         timestamp=(datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
 
-        save_config(xrms,yrms,xrms_err,yrms_err,timestamp=timestamp),#im)
-        numpy_save(timestamp)
+        save_config(xrms,yrms,xrms_err,yrms_err,timestamp=timestamp)#,#im)
+        numpy_save(xrms, yrms, xrms_err, yrms_err,timestamp)
 
     return xrms, yrms, xrms_err, yrms_err
 
-def numpy_save(timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['raw_saves']):
+def numpy_save(xrms, yrms, xrms_err, yrms_err, timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['raw_saves']):
     
     
     ts = isotime()
@@ -414,6 +414,11 @@ def numpy_save(timestamp=False,savelist = pv_savelist['scalars'],path =savepaths
         x.append(timestamp)
     else:
         x.append(ts)
+    x.append(xrms)
+    x.append(yrms)
+    x.append(xrms_err)
+    x.append(yrms_err)
+      
     
     
     img = epics.caget('OTRS:IN20:571:IMAGE')
