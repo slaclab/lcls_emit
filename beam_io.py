@@ -275,7 +275,7 @@ def getbeamsizes_from_img(num_images = n_acquire, avg = avg_ims, subtract_bg = s
         
         im.reshape_im()
         if subtract_bg:
-            beam_image.subtract_bg()
+            im.subtract_bg()
         im.get_im_projection()
         
         #plt.imshow(im.proc_image)
