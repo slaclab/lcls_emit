@@ -438,7 +438,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
             x_max_concave = max_x_range
         if (x_max_concave-x_min_concave)>(max_x_range-min_x_range):
             # if range is too big (in 1/m^2), narrow it down on the larger side
-            print("Range too large, setting to max quad range.)
+            print("Range too large, setting to max quad range.")
             x_min_concave = min_x_range      
             x_max_concave = max_x_range
         x_fine_fit = np.linspace(x_min_concave, x_max_concave, num_points)
@@ -455,7 +455,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
 #             x_fine_fit = np.linspace(np.min(roots)+diff, np.max(roots), num_points)
 #         else:
 #             x_fine_fit = np.linspace(np.min(roots)+2, np.max(roots)-2, num_points)
-        print("Range too large, setting to max quad range.)
+        print("Range too large, setting to max quad range.")
         x_fine_fit = np.linspace(min_x_range, max_x_range, num_points)
             
     else:
