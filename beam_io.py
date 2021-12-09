@@ -37,6 +37,10 @@ min_sigma = 2.0#im_proc['min_sigma']#1.5 # noise
 max_sigma = 800#im_proc['max_sigma']#40 # large/diffuse beam
 max_samples = im_proc['max_samples']#3 # how many times to sample bad beam
 
+#remove hardcoding
+min_sigma=0.000001
+max_sigma=0.004
+
 def isotime():
     return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).astimezone().replace(microsecond=0).isoformat()
 isotime()
@@ -270,6 +274,8 @@ def getbeamsizes_from_img(num_images = n_acquire, avg = avg_ims, subtract_bg = s
         im = Image(im, ncol, nrow, bg_image = bg_image)
         
         im.reshape_im()
+        if subtract_bg:
+            beam_image.subtract_bg()
         im.get_im_projection()
         
         #plt.imshow(im.proc_image)
@@ -327,10 +333,6 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
     yamp =  np.nan
     beamsizes = [np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]
     im = None
-    
-    #remove hardcoding
-    min_sigma=0.000001
-    max_sigma=0.004
 
     if reject_bad_beam:
 
