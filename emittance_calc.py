@@ -8,7 +8,7 @@ from scipy.optimize import curve_fit
 # on sim 
 #from beam_io_sim import get_beamsizes
 # on lcls
-from beam_io import get_beamsizes, setquad
+from beam_io import get_beamsizes, setquad, quad_control
 import json
 from os.path import exists
 
@@ -264,6 +264,9 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     mkdir_p("plots")
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
+    
+    # get init quad value in kGauss
+    init_quad = quad_control(action="get")
 
     kx = get_k1(get_gradient(xrange), beta*energy)
     ky = get_k1(get_gradient(yrange), beta*energy)
@@ -279,6 +282,9 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     if np.isnan(emitx) or np.isnan(emity):
         save_data(timestamp,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,xrms,yrms,kx,ky,str(adapt_ranges))
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
+    
+    # return quad to init value TODO: do this at every return statement
+    quad_control(init_quad, action="set")
     
     bmagx, bmagx_err, beta_quad_x, alpha_quad_x, opt_quad_x = get_bmag(coefsx, coefsx_err, kx_final, emitx, emitx_err, axis='x')
     bmagy, bmagy_err, beta_quad_y, alpha_quad_y, opt_quad_y = get_bmag(coefsy, coefsy_err, ky_final, emity, emity_err, axis='y')   
