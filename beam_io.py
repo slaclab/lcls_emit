@@ -139,7 +139,7 @@ def setquad(value):
     meas_cntrl_pv.put(value)
 
 #def get_beamsize_inj(set_list_pv, set_list_values, quad=meas_input_pv.get(), use_profMon=False):
-def get_beamsize_inj(set_list, quad=meas_input_pv.get(), use_profMon=False):
+def get_beamsize_inj(set_list, quad=meas_read_pv.get(), use_profMon=False):
     """Get beamsize fn that changes upstream cu injector and returns xrms and yrms in [m]"""   
     setinjector(set_list)
     setquad(quad)
