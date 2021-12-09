@@ -49,7 +49,8 @@ class Image:
             if self.proc_image.shape == self.bg_image.shape:
                 self.proc_image = self.proc_image - self.bg_image
                 # some pixels may end up with negative data
-                self.proc_image = [ele if ele >= 0 else 0 for ele in self.proc_image]
+                self.proc_image = np.array([e if e >= 0 else 0 for ele in self.proc_image for e in ele])
+                self.proc_image = self.proc_image.reshape(self.ncol, self.nrow)
             else:
                 print("Beam image and background image are not the same shape.")
 
