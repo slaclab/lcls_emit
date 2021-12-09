@@ -245,7 +245,8 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     bmag_arr = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
     bmag = np.min(bmag_arr)
     print(f"Min bmag: {bmag:.2f}") # TODO: FIT AND RETURN MIN OF FIT INSTEAD (if not getting at given Q value)
-    opt_quad = -1*np.abs(get_quad_field(k[np.argmin(bmag)]))
+    
+    opt_quad = -1*np.abs(get_quad_field(k[np.argmin(bmag_arr)]))
     print(f"For {axis}: Q525 val at min is {opt_quad:.2f} kG")
         
     # ignoring correlations
