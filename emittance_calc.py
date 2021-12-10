@@ -283,10 +283,11 @@ def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err):
     print(f"Min bmag: {np.min(bmag):.2f}")
     print(f"Optimal Q525 val is {opt_quad:.2f} kG")
 
-    plt.plot(k, bmag)
+    x = np.linspace(-10,0,20)
+    plt.plot(x, bmag)
 
     plt.ylabel(r"Bmag (geometric mean)")
-    plt.xlabel(r"k (1/m$^2$)")
+    plt.xlabel(r"B (kG)")
     plt.title("Bmag at OTR2 vs Q525 strength")
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
 
