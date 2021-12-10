@@ -8,12 +8,13 @@ from scipy.optimize import curve_fit
 # on sim 
 #from beam_io_sim import get_beamsizes
 # on lcls
-from beam_io import get_beamsizes, setquad, quad_control
+#from beam_io import get_beamsizes, setquad, quad_control
 import json
 from os.path import exists
 
+
 import epics
-from epics import caget,caput
+from epics import caget, caput
 def isotime():
     return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).astimezone().replace(microsecond=0).isoformat()
 isotime()
@@ -90,16 +91,16 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
        returns: c0, c1, c2"""
     sizes = np.array(sizes)
     
-    
+
     cutoff = 1.7
     print(k)
     print(sizes)
     idx = np.argwhere(sizes<cutoff*np.min(sizes)).flatten()
     print(idx)
-    
+
     sizes = sizes[idx]
     k = k[idx]
-    
+
     print(k)
     print(sizes)
     
@@ -241,8 +242,10 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     sig_11_screen = []
     sig_12_screen = []
     sig_22_screen = []
-    
-    kLlist = k*l
+
+    # y has opposite sign k
+    sign = -1 if axis=="y" else 1
+    kLlist = sign*k*l
     for kL in kLlist:
         mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
         sigma1 = propagate_sigma(sigma0, mat2)
@@ -260,18 +263,41 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     
     # Form bmag
     gamma0 = (1+alpha0**2)/beta0
-    bmag_arr = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
-    bmag = np.min(bmag_arr)
-    print(f"Min bmag: {bmag:.2f}") # TODO: FIT AND RETURN MIN OF FIT INSTEAD (if not getting at given Q value)
-    
-    opt_quad = -1*np.abs(get_quad_field(k[np.argmin(bmag_arr)]))
-    print(f"For {axis}: Q525 val at min is {opt_quad:.2f} kG")
+    bmag = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
+
+    print(f"Min bmag{axis}: {np.min(bmag):.2f}") # TODO: FIT AND RETURN MIN OF FIT INSTEAD (if not getting at given Q value)
         
     # ignoring correlations
     # TODO: check error propagation for bmag
     bmag_err = bmag * np.sqrt((c2_err/c2)**2 + (c1_err/c1)**2 + (c0_err/c0)**2)
     # return bmag_list
-    return bmag, bmag_err, beta_quad, alpha_quad, opt_quad
+    return bmag, bmag_err, beta_quad, alpha_quad
+
+def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err):
+    import matplotlib.pyplot as plt
+    fig = plt.figure(figsize=(7,5))
+
+    bmag = np.sqrt(bmagx*bmagy)
+
+    opt_quad = get_quad_field(k[np.argmin(bmag)])
+    print(f"Min bmag: {np.min(bmag):.2f}")
+    print(f"Optimal Q525 val is {opt_quad:.2f} kG")
+
+    plt.plot(k, bmag)
+
+    plt.ylabel(r"Bmag (geometric mean)")
+    plt.xlabel(r"k (1/m$^2$)")
+    plt.title("Bmag at OTR2 vs Q525 strength")
+    timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
+
+    # DEBUGGING
+    if save_plot:
+        plt.savefig(savepaths['fits'] + f"bmag_otr2_{timestamp}.png", dpi=100)
+    plt.show()
+    plt.close()
+
+    #TODO: propagate error
+    return bmag, opt_quad
 
 def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=None,\
                  adapt_ranges=False, num_points=5, show_plots=False):
@@ -299,16 +325,26 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     if np.isnan(emitx) or np.isnan(emity):
+        print(emitx,emity)
         save_data(timestamp,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,xrms,yrms,kx,ky,str(adapt_ranges))
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     
     # return quad to init value TODO: do this at every return statement
     quad_control(init_quad, action="set")
+
+    # taking full quad range from 0 to -10 kG
+    k = np.linspace(get_k1(get_gradient(-10), beta*energy), get_k1(get_gradient(0), beta*energy), 20)
+
+    bmagx, bmagx_err, beta_quad_x, alpha_quad_x = get_bmag(coefsx, coefsx_err, k, emitx, emitx_err, axis='x')
+    bmagy, bmagy_err, beta_quad_y, alpha_quad_y = get_bmag(coefsy, coefsy_err, k, emity, emity_err, axis='y')
     
-    bmagx, bmagx_err, beta_quad_x, alpha_quad_x, opt_quad_x = get_bmag(coefsx, coefsx_err, kx_final, emitx, emitx_err, axis='x')
-    bmagy, bmagy_err, beta_quad_y, alpha_quad_y, opt_quad_y = get_bmag(coefsy, coefsy_err, ky_final, emity, emity_err, axis='y')   
-    
-        
+    bmag, opt_quad = get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err)
+
+    bmagx = np.min(bmagx)
+    bmagy = np.min(bmagy)
+    bmagx_err = bmagx_err[np.argmin(bmagx)]
+    bmagy_err = bmagy_err[np.argmin(bmagy)]
+
     norm_emitx = emitx*gamma*beta
     norm_emitx_err = emitx_err*gamma*beta
     norm_emity = emity*gamma*beta
@@ -317,12 +353,11 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     # log data
     save_data(timestamp,norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,\
               str(np.array(xrms)),str(np.array(yrms)),str(kx),str(ky),str(adapt_ranges))
+
+
+    numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,bmag,opt_quad,timestamp=timestamp)
+
     
-    
-    numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,opt_quad_x,opt_quad_y,timestamp=timestamp)
-    
-    
-    #print(adapt_ranges)
     print(f"nemitx: {norm_emitx/1e-6:.2f}, nemity: {norm_emity/1e-6:.2f}")
     print(f"nemitx_err: {norm_emitx_err/1e-6:.2f}, nemity_err: {norm_emity_err/1e-6:.2f}")
     print(f"bmagx: {bmagx:.2f}, bmagy: {bmagy:.2f}")
@@ -361,9 +396,8 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     plt.title(f"{axis}-axis "+title_suffix)
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
-    # DEBUGGING
+    # # DEBUGGING
     if save_plot:
-
         plt.savefig(savepaths['fits'] + f"emittance_{axis}_fit_{timestamp}.png", dpi=100)
 
     if show_plots:
@@ -540,8 +574,8 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
              save_plot=save_plot, show_plots=show_plots, title_suffix=" - adapted range")
     return coefs, cov, x_fine_fit
 
-def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,opt_quad_x,opt_quad_y,timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['emit_saves']):
-        
+def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,bmag,opt_quad,timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['emit_saves']):
+
     ts = isotime()
     x = epics.caget_many(savelist)
     x.append(ts)
@@ -549,7 +583,7 @@ def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,b
         x.append(timestamp)
     else:
         x.append(ts)
-        
+
     x.append(norm_emitx)
     x.append(norm_emity)
     x.append(bmagx)
@@ -562,22 +596,20 @@ def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,b
     x.append(alpha_quad_x)
     x.append(beta_quad_y)
     x.append(alpha_quad_y)
-    x.append(opt_quad_x)
-    x.append(opt_quad_y)
+    x.append(bmag)
+    x.append(opt_quad)
 
-    
-  
-    
+
     img=epics.caget('OTRS:IN20:571:IMAGE')
     nrow = epics.caget('OTRS:IN20:571:ROI_XNP')
-    ncol = epics.caget('OTRS:IN20:571:ROI_YNP')    
+    ncol = epics.caget('OTRS:IN20:571:ROI_YNP')
 
     res = epics.caget('OTRS:IN20:571:RESOLUTION')
-    
+
 
     np.save(path+ts+'_571_img_.npy',img.reshape((ncol,nrow)))
     np.save(path+ts+'_571_res_.npy',np.array(res))
-    
+
     np.save(path+ts+'_x_.npy',np.array(x))
 
     
