@@ -27,12 +27,18 @@ warnings.simplefilter('ignore', scipy.optimize.OptimizeWarning)
 rootp =  '/home/physics/edelen/20211209_Injector_MD/'
 
 beamline_info = json.load(open(rootp+'config_files/beamline_info.json'))
+meas_pv_info = json.load(open(rootp+'config_files/meas_pv_info.json'))
 
 m_0 = beamline_info['m_0']
 d = beamline_info['d']
 l = beamline_info['l']
 twiss0 = beamline_info['Twiss0']
 energy = beamline_info['energy']
+
+# scanning quad range
+meas_min = meas_pv_info['meas_device']['pv']['min']
+meas_max = meas_pv_info['meas_device']['pv']['max']
+
 
 #load info about where to put saving of raw images and summaries; make directories if needed and start headings
 savepaths = json.load(open(rootp+'config_files/savepaths.json'))
@@ -283,7 +289,7 @@ def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err):
     print(f"Min bmag: {np.min(bmag):.2f}")
     print(f"Optimal Q525 val is {opt_quad:.2f} kG")
 
-    x = np.linspace(-10,0,20)
+    x = np.linspace(meas_min, meas_max, 20)
     plt.plot(x, bmag)
 
     plt.ylabel(r"Bmag (geometric mean)")
@@ -334,7 +340,7 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     quad_control(init_quad, action="set")
 
     # taking full quad range from 0 to -10 kG
-    k = np.linspace(get_k1(get_gradient(-10), beta*energy), get_k1(get_gradient(0), beta*energy), 20)
+    k = np.linspace(get_k1(get_gradient(meas_min), beta*energy), get_k1(get_gradient(meas_max), beta*energy), 20)
 
     bmagx, bmagx_err, beta_quad_x, alpha_quad_x = get_bmag(coefsx, coefsx_err, k, emitx, emitx_err, axis='x')
     bmagy, bmagy_err, beta_quad_y, alpha_quad_y = get_bmag(coefsy, coefsy_err, k, emity, emity_err, axis='y')
