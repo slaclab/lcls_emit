@@ -272,7 +272,7 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     bmag = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
 
     # coefs to obtain bmax/bmagy at opt quad val
-    b_kG = sign*get_quad_field(k)
+    b_kG = get_quad_field(k)
     coefs_bmag, cov_bmag = curve_fit(func, b_kG, bmag, sigma=None, absolute_sigma=False)
 
     print(f"Min bmag{axis}: {np.min(bmag):.2f}") # TODO: FIT AND RETURN MIN OF FIT INSTEAD (if not getting at given Q value)
