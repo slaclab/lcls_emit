@@ -250,7 +250,7 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     sig_22_screen = []
 
     # y has opposite sign k
-    sign = -1 if axis=="y" else 1
+    sign = -1 if axis == "y" else 1
     kLlist = sign*k*l
     for kL in kLlist:
         mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
@@ -263,7 +263,7 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     sig_12_screen = np.array(sig_12_screen)
     sig_22_screen = np.array(sig_22_screen)
     
-    beta  = sig_11_screen/emit
+    beta = sig_11_screen/emit
     alpha = -sig_12_screen/emit
     gamma = sig_22_screen/emit
     
@@ -271,23 +271,35 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     gamma0 = (1+alpha0**2)/beta0
     bmag = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
 
+    # coefs to obtain bmax/bmagy at opt quad val
+    b_kG = sign*get_quad_field(k)
+    coefs_bmag, cov_bmag = curve_fit(func, b_kG, bmag, sigma=None, absolute_sigma=False)
+
     print(f"Min bmag{axis}: {np.min(bmag):.2f}") # TODO: FIT AND RETURN MIN OF FIT INSTEAD (if not getting at given Q value)
         
     # ignoring correlations
     # TODO: check error propagation for bmag
     bmag_err = bmag * np.sqrt((c2_err/c2)**2 + (c1_err/c1)**2 + (c0_err/c0)**2)
     # return bmag_list
-    return bmag, bmag_err, beta_quad, alpha_quad
+    return bmag, bmag_err, beta_quad, alpha_quad, coefs_bmag
 
-def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err):
+
+def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err, coefs_bmagx, coefs_bmagy):
+    from numpy.polynomial.polynomial import polyval
     import matplotlib.pyplot as plt
     fig = plt.figure(figsize=(7,5))
 
     bmag = np.sqrt(bmagx*bmagy)
 
     opt_quad = get_quad_field(k[np.argmin(bmag)])
+    c2_x, c1_x, c0_x = coefs_bmagx
+    c2_y, c1_y, c0_y = coefs_bmagy
+    bmag_x = polyval(opt_quad, [c0_x, c1_x, c2_x])
+    bmag_y = polyval(opt_quad, [c0_y, c1_y, c2_y])
+
     print(f"Min bmag: {np.min(bmag):.2f}")
     print(f"Optimal Q525 val is {opt_quad:.2f} kG")
+    print(f"Bmagx at opt quad: {bmag_x:.2f}, Bmagy at opt quad: {bmag_y:.2f}")
 
     x = np.linspace(meas_min, meas_max, 20)
     plt.plot(x, bmag)
@@ -305,9 +317,9 @@ def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err):
     plt.close()
 
     #TODO: propagate error
-    return bmag, opt_quad
+    return bmag, opt_quad, bmag_x, bmag_y
 
-def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=None,\
+def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=None,
                  adapt_ranges=False, num_points=5, show_plots=False):
     """Returns normalized emittance [m]
        given quad values and beamsizes""" 
@@ -324,16 +336,16 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     kx = get_k1(get_gradient(xrange), beta*energy)
     ky = get_k1(get_gradient(yrange), beta*energy)
     
-    emitx, emitx_err, coefsx, coefsx_err, kx_final = fit_sigma(np.array(xrms), kx, axis='x', sizes_err=xrms_err,\
+    emitx, emitx_err, coefsx, coefsx_err, kx_final = fit_sigma(np.array(xrms), kx, axis='x', sizes_err=xrms_err,
                                        adapt_ranges=adapt_ranges, num_points=num_points, show_plots=show_plots)
 
-    emity, emity_err, coefsy, coefsy_err, ky_final = fit_sigma(np.array(yrms), -ky, axis='y', sizes_err=yrms_err,\
+    emity, emity_err, coefsy, coefsy_err, ky_final = fit_sigma(np.array(yrms), -ky, axis='y', sizes_err=yrms_err,
                                        adapt_ranges=adapt_ranges, num_points=num_points, show_plots=show_plots)
     
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     if np.isnan(emitx) or np.isnan(emity):
-        print(emitx,emity)
+        print(emitx, emity)
         save_data(timestamp,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,xrms,yrms,kx,ky,str(adapt_ranges))
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     
@@ -343,11 +355,12 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     # taking full quad range from 0 to -10 kG
     k = np.linspace(get_k1(get_gradient(meas_min), beta*energy), get_k1(get_gradient(meas_max), beta*energy), 20)
 
-    bmagx, bmagx_err, beta_quad_x, alpha_quad_x = get_bmag(coefsx, coefsx_err, k, emitx, emitx_err, axis='x')
-    bmagy, bmagy_err, beta_quad_y, alpha_quad_y = get_bmag(coefsy, coefsy_err, k, emity, emity_err, axis='y')
+    bmagx, bmagx_err, beta_quad_x, alpha_quad_x, coefs_bmagx = get_bmag(coefsx, coefsx_err, k, emitx, emitx_err, axis='x')
+    bmagy, bmagy_err, beta_quad_y, alpha_quad_y, coefs_bmagy = get_bmag(coefsy, coefsy_err, k, emity, emity_err, axis='y')
     
-    bmag, opt_quad = get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err)
+    bmag, opt_quad, opt_bmag_x, opt_bmag_y = get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err, coefs_bmagx, coefs_bmagy)
 
+    # save opt_bmag_x, opt_bmag_y instead?
     bmagx = np.min(bmagx)
     bmagy = np.min(bmagy)
     bmagx_err = bmagx_err[np.argmin(bmagx)]
