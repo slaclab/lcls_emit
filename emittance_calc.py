@@ -8,7 +8,7 @@ from scipy.optimize import curve_fit
 # on sim 
 #from beam_io_sim import get_beamsizes
 # on lcls
-#from beam_io import get_beamsizes, setquad, quad_control
+from beam_io import get_beamsizes, setquad, quad_control
 import json
 from os.path import exists
 
@@ -23,8 +23,8 @@ isotime()
 # do not display warnings when cov can't be computed
 # this will happen when len(y)<=3 and yerr=0
 warnings.simplefilter('ignore', scipy.optimize.OptimizeWarning)
-
-rootp =  '/home/physics/edelen/20211209_Injector_MD/'
+rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+#rootp =  '/home/physics/edelen/20211209_Injector_MD/'
 
 beamline_info = json.load(open(rootp+'config_files/beamline_info.json'))
 meas_pv_info = json.load(open(rootp+'config_files/meas_pv_info.json'))
@@ -98,7 +98,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     sizes = np.array(sizes)
     
 
-    cutoff = 1.7
+    cutoff =4
     print(k)
     print(sizes)
     idx = np.argwhere(sizes<cutoff*np.min(sizes)).flatten()
@@ -296,7 +296,8 @@ def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err):
     plt.xlabel(r"B (kG)")
     plt.title("Bmag at OTR2 vs Q525 strength")
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
-
+    
+    save_plot = True
     # DEBUGGING
     if save_plot:
         plt.savefig(savepaths['fits'] + f"bmag_otr2_{timestamp}.png", dpi=100)
@@ -357,11 +358,11 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     norm_emity = emity*gamma*beta
     norm_emity_err = emity_err*gamma*beta 
     
+    #hardcoded
+    epics.caput('QUAD:IN10:525:BCTRL',opt_quad)
     # log data
     save_data(timestamp,norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,\
               str(np.array(xrms)),str(np.array(yrms)),str(kx),str(ky),str(adapt_ranges))
-
-
     numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,bmag,opt_quad,timestamp=timestamp)
 
     
@@ -372,7 +373,7 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     
 
     
-    return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err
+    return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err,np.min(bmag),opt_quad
 
 def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, title_suffix=""):
     """Plot and save the emittance fits of size**2 vs k"""
@@ -420,7 +421,7 @@ def get_quad_field(k, energy=energy, l=l):
 def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, num_points=5, save_plot=False, show_plots=True):
     """Returns new scan quad values if called without initial fit coefs"""
     """Returns new coefs if called from fit_sigma with initial fit coefs"""
-    cutoff = 1.7
+    cutoff =4
     print(x)
     print(y)
     idx = np.argwhere(y<cutoff*np.min(y)).flatten()
@@ -461,11 +462,11 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     if axis == 'x':
         min_x, max_x = np.min(x), 0
         # quad ranges 0 to -10 kG for scanning
-        min_x_range, max_x_range = -14.4, -2.06
+        min_x_range, max_x_range = -16.0,-8.9#-20.0, -13.0
     elif axis == 'y':
         min_x, max_x = np.min(x), np.max(x)
         # quad ranges 0 to -10 kG for scanning
-        min_x_range, max_x_range = 2.06, 14.4
+        min_x_range, max_x_range = 16.0, 8.9
         
     c2, c1, c0 = fit_coefs
     
@@ -477,8 +478,8 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     # find range within 2-3x the focus size 
     y_lim = np.min(np.polyval(fit_coefs, x_fit))*cutoff
     print('ylm1',y_lim)
-    #y_lim = np.min(y**2)*1.5
-    #print('ylm1',y_lim)
+    y_lim = np.min(y**2)*cutoff
+    print('ylm2',y_lim)
 
     if y_lim<0:
         print(f"{axis} axis: min. of poly fit is negative. Setting it to 0.")
@@ -551,7 +552,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     fine_fit_sizes, fine_fit_sizes_err = [], []
     for ele in x_fine_fit:
         setquad(sign*get_quad_field(ele))
-        time.sleep(3)
+        time.sleep(3.0)
         beamsizes = get_beamsizes()
         #print(beamsizes)
         fine_fit_sizes.append(beamsizes[ax_idx_size])
@@ -606,16 +607,6 @@ def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,b
     x.append(bmag)
     x.append(opt_quad)
 
-
-    img=epics.caget('OTRS:IN20:571:IMAGE')
-    nrow = epics.caget('OTRS:IN20:571:ROI_XNP')
-    ncol = epics.caget('OTRS:IN20:571:ROI_YNP')
-
-    res = epics.caget('OTRS:IN20:571:RESOLUTION')
-
-
-    np.save(path+ts+'_571_img_.npy',img.reshape((ncol,nrow)))
-    np.save(path+ts+'_571_res_.npy',np.array(res))
 
     np.save(path+ts+'_x_.npy',np.array(x))
 
