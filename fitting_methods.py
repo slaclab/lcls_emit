@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import json
 
-#rootp = '/home/fphysics/edelen/sw/lcls_emit/'
-rootp =  '/home/physics/edelen/20211209_Injector_MD/'
+rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+#rootp =  '/home/physics/edelen/20211209_Injector_MD/'
 
 #load info about where to put saving of raw images and summaries; make directories if needed and start headings
 savepaths = json.load(open(rootp+'config_files/savepaths.json'))
@@ -17,7 +17,7 @@ def gaussian_linear_background(x, amp, mu, sigma, slope=0, offset=0):
     """Gaussian plus linear background fn"""
     return amp*np.exp( -(x-mu)**2/2/sigma**2 ) + slope * x + offset 
 
-def fit_gaussian_linear_background(y, para0 = None, show_plots=False, cut_area = None):
+def fit_gaussian_linear_background(y, para0 = None, show_plots=True, cut_area = None):
     """Takes a function y and inputs and fits and Gaussian with
     linear bg to it. Returns the best fit estimates of the parameters 
     amp, mu, sigma and their associated 1sig error """
@@ -107,7 +107,7 @@ def plot_fit(x, y, para_x, show_plots=False,save_plots=False):
     plt.tight_layout()
     
     if save_plots:
-        plt.savefig(savepaths['fits'],f"beamsize_fit_{timestamp}.png", dpi=100)
+        plt.savefig(savepaths['fits']+f"beamsize_fit_{timestamp}.png", dpi=100)
     if show_plots:
         plt.show()
     plt.close()

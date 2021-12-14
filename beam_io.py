@@ -12,13 +12,15 @@ from os.path import exists
 from epics import caget, caput, PV
 import epics
 
+
 ##################################
-#rootp = '/home/fphysics/edelen/sw/lcls_emit/'
-rootp = '/home/physics/edelen/20211209_Injector_MD/'
+rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+#rootp = '/home/physics/edelen/20211209_Injector_MD/'
 
 #load image processing setting info
 im_proc = json.load(open(rootp+'config_files/img_proc.json'))
 subtract_bg = im_proc['subtract_bg']
+print('sb',subtract_bg)
 bg_image = im_proc['background_im'] #specify path to bg im in json file
 use_roi = im_proc['use_roi']
 roi_xmin = im_proc['roi']['xmin']
@@ -28,8 +30,8 @@ roi_ymax = im_proc['roi']['ymax']
 avg_ims = im_proc['avg_ims']
 n_acquire = im_proc['n_to_acquire']
 
-amp_threshold_x = 50 #im_proc['amp_threshold']#1500 
-amp_threshold_y = 50
+amp_threshold_x = 200 #im_proc['amp_threshold']#1500 
+amp_threshold_y = 200
 min_sigma = 1.0 #im_proc['min_sigma']#1.5 # noise
 max_sigma = 1000 #im_proc['max_sigma']#40 # large/diffuse beam
 max_samples = im_proc['max_samples']#3 # how many times to sample bad beam
@@ -44,7 +46,7 @@ isotime()
 meas_pv_info = json.load(open(rootp+'config_files/meas_pv_info.json'))
 pv_savelist = json.load(open(rootp+'config_files/save_scalar_pvs.json'))
 
-resolution = epics.caget('OTRS:IN20:571:RESOLUTION')*10**-6#12.23*1e-6#PV(meas_pv_info['diagnostic']['pv']['resolution'])*1e-6 #12.23*1e-6 # in meters for emittance calc
+resolution = epics.caget('PROF:IN10:571:RESOLUTION')*10**-6#12.23*1e-6#PV(meas_pv_info['diagnostic']['pv']['resolution'])*1e-6 #12.23*1e-6 # in meters for emittance calc
 
 online=True
 if online:
@@ -312,8 +314,8 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
     
     
     #remove hardcoding
-    min_sigma=0.000002
-    max_sigma=0.01
+    min_sigma=0.00000002
+    max_sigma=0.1
 
     if reject_bad_beam:
 
@@ -328,9 +330,12 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
 
             #make sure stats is checked on profmon gui
             if use_profMon:
+                beamsizes=[]
                 xrms, xrms_err = x_size_pv.get()*1e-6, 0 # in meters
                 yrms, yrms_err = y_size_pv.get()*1e-6, 0 # in meters
-                
+                #print('bz',xrms,yrms)
+                #print(x_size_pv)
+                #print(y_size_pv)
                 count = count + 1
 
             if not use_profMon:
@@ -424,16 +429,7 @@ def numpy_save(xrms, yrms, xrms_err, yrms_err, timestamp=False,savelist = pv_sav
     x.append(xrms_err)
     x.append(yrms_err)
     
-    
-    img = epics.caget('OTRS:IN20:571:IMAGE')
-    nrow = epics.caget('OTRS:IN20:571:ROI_XNP')
-    ncol = epics.caget('OTRS:IN20:571:ROI_YNP')    
 
-    res = epics.caget('OTRS:IN20:571:RESOLUTION')
-    
-
-    np.save(path+ts+'_571_img_.npy', img.reshape((ncol, nrow)))
-    np.save(path+ts+'_571_res_.npy', np.array(res))
     
     np.save(path+ts+'_x_.npy',np.array(x))
 
