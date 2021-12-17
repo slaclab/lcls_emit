@@ -693,9 +693,6 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         fine_fit_sizes_err.append(beamsizes[ax_idx_err])
         #print(fine_fit_sizes)
 
-    x_fine_fit, fine_fit_sizes, fine_fit_sizes_err = check_symmetry(fine_fit_sizes, fine_fit_sizes_err, x_fine_fit,
-                                                                    axis)
-
     if np.isnan(fine_fit_sizes).any():
         not_nan_array = ~np.isnan(fine_fit_sizes)
         fine_fit_sizes = np.array(fine_fit_sizes)[not_nan_array]
@@ -707,6 +704,15 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     # check symmetry again in case many NaNs were dropped, TODO: is this needed?
     x_fine_fit, fine_fit_sizes, fine_fit_sizes_err = check_symmetry(fine_fit_sizes, fine_fit_sizes_err, x_fine_fit,
                                                                     axis)
+
+    # check for NaNs again 
+    if np.isnan(fine_fit_sizes).any():
+        not_nan_array = ~np.isnan(fine_fit_sizes)
+        fine_fit_sizes = np.array(fine_fit_sizes)[not_nan_array]
+        fine_fit_sizes_err = np.array(fine_fit_sizes_err)[not_nan_array]
+        x_fine_fit = np.array(x_fine_fit)[not_nan_array]
+        if (len(fine_fit_sizes) < 3) or (True not in not_nan_array):
+            return np.nan, np.nan
 
     # TODO: avoid rewriting these! need refactoring
     if np.isnan(fine_fit_sizes).any():
