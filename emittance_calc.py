@@ -701,10 +701,10 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         if (len(fine_fit_sizes) < 3) or (True not in not_nan_array):
             return np.nan, np.nan
 
-    # check symmetry again in case many NaNs were dropped, TODO: is this needed?
+    # check symmetry
     x_fine_fit, fine_fit_sizes, fine_fit_sizes_err = check_symmetry(fine_fit_sizes, fine_fit_sizes_err, x_fine_fit,
                                                                     axis)
-
+    
     # check for NaNs again 
     if np.isnan(fine_fit_sizes).any():
         not_nan_array = ~np.isnan(fine_fit_sizes)
