@@ -118,6 +118,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     
     if sizes_err is not None and sizes.all()>0 and sizes_err.all()>0:
         w = 2*sizes*np.array(sizes_err) # sigma for poly fit
+        w = np.sqrt(w**2 + sizes**2) # adding the sizes as extra weights
         abs_sigma = True
     else:
         w = None
@@ -222,10 +223,7 @@ def quad_drift_mat2(kL, *, Ltot=d+l,  Lquad=l):
 def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     """Calculates Bmag from calculated emittance
     and from initial Twiss at OTR2: HARDCODED from Matlab GUI"""
-    # HARDCODED INIT TWISS PARAMS
-    # TODO: clean up LCLS/machine specific info
-    #twiss0 = [1e-6, 1e-6, 1.113081026, 1.113021659, -6.89403587e-2, -7.029489754e-2]
-    
+
     c2, c1, c0 = coefs
     c2_err, c1_err, c0_err = coefs_err
     
@@ -242,16 +240,13 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
 
     beta_quad = sig11/emit
     alpha_quad = -sig12/emit
-    gamma_quad = sig22/emit
-    
+
     # Propagate forward to the screen
     sig_11_screen = []
     sig_12_screen = []
     sig_22_screen = []
 
-    # y has opposite sign k
-    sign = -1 if axis == "y" else 1
-    kLlist = sign*k*l
+    kLlist = k * l
     for kL in kLlist:
         mat2 = quad_drift_mat2(kL, Lquad=l, Ltot=d)
         sigma1 = propagate_sigma(sigma0, mat2)
@@ -262,7 +257,8 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     sig_11_screen = np.array(sig_11_screen)
     sig_12_screen = np.array(sig_12_screen)
     sig_22_screen = np.array(sig_22_screen)
-    
+
+    # Twiss at screen
     beta = sig_11_screen/emit
     alpha = -sig_12_screen/emit
     gamma = sig_22_screen/emit
@@ -271,42 +267,96 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0 = twiss0):
     gamma0 = (1+alpha0**2)/beta0
     bmag = (beta * gamma0 - 2*alpha * alpha0 + gamma * beta0) / 2
 
-    # coefs to obtain bmax/bmagy at opt quad val
-    b_kG = get_quad_field(k)
-    coefs_bmag, cov_bmag = curve_fit(func, b_kG, bmag, sigma=None, absolute_sigma=False)
+    # bmag fn of c2, c1, c0, get bmag err from c2_err, c1_err, c0_err
+    # ignoring correlations, TODO: check simpler way to add correlations
+    bmag_err = bmag * np.sqrt((c2_err / c2) ** 2 + (c1_err / c1) ** 2 + (c0_err / c0) ** 2)
 
-    print(f"Min bmag{axis}: {np.min(bmag):.2f}") # TODO: FIT AND RETURN MIN OF FIT INSTEAD (if not getting at given Q value)
-        
-    # ignoring correlations
-    # TODO: check error propagation for bmag
-    bmag_err = bmag * np.sqrt((c2_err/c2)**2 + (c1_err/c1)**2 + (c0_err/c0)**2)
+    print(
+        f"Min bmag{axis}: {np.min(bmag):.2f} +/- {bmag_err[np.argmin(bmag)]:.2f}")
+
     # return bmag_list
-    return bmag, bmag_err, beta_quad, alpha_quad, coefs_bmag
+    return bmag, bmag_err, beta_quad, alpha_quad
 
 
-def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err, coefs_bmagx, coefs_bmagy):
+def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err):
     from numpy.polynomial.polynomial import polyval
     import matplotlib.pyplot as plt
-    fig = plt.figure(figsize=(7,5))
+    fig = plt.figure(figsize=(7, 5))
 
-    bmag = np.sqrt(bmagx*bmagy)
+    bmag = np.sqrt(bmagx * bmagy)
+    # TODO: is there a better way to do this?
+    #  (technically a fn of the coeffs, need to take derivatives...)
+    bmag_err = bmag * np.sqrt((bmagx_err / bmagx) ** 2 + (bmagy_err / bmagy) ** 2)
 
-    opt_quad = get_quad_field(k[np.argmin(bmag)])
-    c2_x, c1_x, c0_x = coefs_bmagx
-    c2_y, c1_y, c0_y = coefs_bmagy
-    bmag_x = polyval(opt_quad, [c0_x, c1_x, c2_x])
-    bmag_y = polyval(opt_quad, [c0_y, c1_y, c2_y])
+    min_idx = np.argmin(bmag)
+    bmag_min = np.min(bmag)
+    bmag_min_err = bmag_err[min_idx]
 
-    print(f"Min bmag: {np.min(bmag):.2f}")
-    print(f"Optimal Q525 val is {opt_quad:.2f} kG")
-    print(f"Bmagx at opt quad: {bmag_x:.2f}, Bmagy at opt quad: {bmag_y:.2f}")
+    # find min of bmag WITHIN uncertainties, x axis in kG
+    coefs_bmag_fit, cov_bmag_fit = curve_fit(func, get_quad_field(k), bmag, sigma=bmag_err, absolute_sigma=True)
+    c2, c1, c0 = coefs_bmag_fit
+    opt_quad_roots = np.roots((c2, c1, c0 - (bmag_min+bmag_min_err)))
+    opt_quad_roots = opt_quad_roots
+    opt_quad = np.mean(opt_quad_roots)
+    opt_quad_err = abs(opt_quad_roots[0] - opt_quad)
 
+
+    # get bmagx/y at min within uncertainties from opt_quad
+    """USING FITS"""
+    # params: polyval( x_val, [c0, c1, c2])
+    coefs_x_tmp, cov_x_tmp = curve_fit(func, get_quad_field(k), bmagx, sigma=bmagx_err, absolute_sigma=True)
+    coefs_y_tmp, cov_y_tmp = curve_fit(func, get_quad_field(k), bmagy, sigma=bmagy_err, absolute_sigma=True)
+    c2x, c1x, c0x = coefs_x_tmp
+    c2y, c1y, c0y = coefs_y_tmp
+    # get bmagx/y at opt_quad
+    bmag_x_opt = polyval(opt_quad, [c0x, c1x, c2x])
+    bmag_y_opt = polyval(opt_quad, [c0y, c1y, c2y])
+    # get uncertainty on bmagx/y within opt_quad +/- err
+    bmag_x_opt_err_upper = abs(polyval(opt_quad+opt_quad_err, [c0x, c1x, c2x]) - bmag_x_opt)
+    bmag_y_opt_err_upper = abs(polyval(opt_quad+opt_quad_err, [c0y, c1y, c2y]) - bmag_y_opt)
+    bmag_x_opt_err_lower = abs(polyval(opt_quad-opt_quad_err, [c0x, c1x, c2x]) - bmag_x_opt)
+    bmag_y_opt_err_lower = abs(polyval(opt_quad-opt_quad_err, [c0y, c1y, c2y]) - bmag_y_opt)
+
+    opt_vals_from_fits = bmag_x_opt, bmag_x_opt_err_upper, bmag_x_opt_err_lower,\
+                         bmag_y_opt, bmag_y_opt_err_upper, bmag_y_opt_err_lower
+
+    """USING MEASUREMENTS"""
+    bmag_x_opt_meas = bmagx[min_idx]
+    bmag_y_opt_meas = bmagy[min_idx]
+    bmag_x_opt_err_meas = bmagx_err[min_idx]  # errors are assumed symmetrical
+    bmag_y_opt_err_meas = bmagy_err[min_idx]
+
+    opt_vals_from_meas = bmag_x_opt_meas, bmag_x_opt_err_meas, bmag_x_opt_err_meas,\
+                         bmag_y_opt_meas, bmag_y_opt_err_meas, bmag_y_opt_err_meas
+
+    """PLOTTING FIT METHOD"""
     x = np.linspace(meas_min, meas_max, 20)
-    plt.plot(x, bmag)
+    x_fit = np.linspace(meas_min, meas_max, 100)
+    plt.errorbar(x, bmag, bmag_err, color="C0", label="bmag")
+    plt.errorbar(x, bmagx, bmagx_err, color="C1", label="bmagx")
+    plt.errorbar(x, bmagy, bmagy_err, color="C2", label="bmagy")
+
+    plt.errorbar(x_fit, polyval(x_fit, [c0, c1, c2]), color="C0", linestyle="dotted")
+    plt.errorbar(x_fit, polyval(x_fit, [c0x, c1x, c2x]),  color="C1", linestyle="dotted")
+    plt.errorbar(x_fit, polyval(x_fit, [c0y, c1y, c2y]),  color="C2", linestyle="dotted")
+
+    plt.ylim(0, np.max(bmag))
+    plt.xlim(meas_min, meas_max)
+    plt.vlines(opt_quad, 0, np.max(bmag), color="gray", linestyle="dashed", alpha=0.5)
+
+    # these can plot the other method as lines
+    # plt.hlines(bmag_x_opt_meas, meas_min, meas_max, color="gray", linestyle="solid", alpha=0.5)
+    # plt.hlines(bmag_x_opt_meas+bmag_x_opt_err_meas, meas_min, meas_max, color="gray", linestyle="dashed", alpha=0.5)
+    # plt.hlines(bmag_x_opt_meas-bmag_x_opt_err_meas, meas_min, meas_max, color="gray", linestyle="dashed", alpha=0.5)
+
+    # plt.hlines(bmag_x_opt, meas_min, meas_max, color="blue", linestyle="solid", alpha=0.5)
+    # plt.hlines(bmag_x_opt+bmag_x_opt_err_upper, meas_min, meas_max, color="blue", linestyle="dashed", alpha=0.7)
+    # plt.hlines(bmag_x_opt-bmag_x_opt_err_lower, meas_min, meas_max, color="blue", linestyle="dashed", alpha=0.7)
 
     plt.ylabel(r"Bmag (geometric mean)")
     plt.xlabel(r"B (kG)")
     plt.title("Bmag at OTR2 vs Q525 strength")
+    plt.legend()
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     save_plot = True
@@ -316,8 +366,7 @@ def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err, coefs_bmagx, coefs_bmagy
     plt.show()
     plt.close()
 
-    #TODO: propagate error
-    return bmag, opt_quad, bmag_x, bmag_y
+    return bmag_min, bmag_min_err, opt_quad, opt_quad_err, opt_vals_from_fits, opt_vals_from_meas
 
 def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=None,
                  adapt_ranges=False, num_points=5, show_plots=False):
@@ -355,38 +404,56 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     # taking full quad range from 0 to -10 kG
     k = np.linspace(get_k1(get_gradient(meas_min), beta*energy), get_k1(get_gradient(meas_max), beta*energy), 20)
 
-    bmagx, bmagx_err, beta_quad_x, alpha_quad_x, coefs_bmagx = get_bmag(coefsx, coefsx_err, k, emitx, emitx_err, axis='x')
-    bmagy, bmagy_err, beta_quad_y, alpha_quad_y, coefs_bmagy = get_bmag(coefsy, coefsy_err, k, emity, emity_err, axis='y')
-    
-    bmag, opt_quad, opt_bmag_x, opt_bmag_y = get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err, coefs_bmagx, coefs_bmagy)
+    bmagx, bmagx_err, beta_quad_x, alpha_quad_x = get_bmag(coefsx, coefsx_err, k, emitx, emitx_err,
+                                                           axis='x')
+    bmagy, bmagy_err, beta_quad_y, alpha_quad_y = get_bmag(coefsy, coefsy_err, -k, emity, emity_err,
+                                                           axis='y')
 
-    # save opt_bmag_x, opt_bmag_y instead?
-    bmagx = np.min(bmagx)
-    bmagy = np.min(bmagy)
-    bmagx_err = bmagx_err[np.argmin(bmagx)]
-    bmagy_err = bmagy_err[np.argmin(bmagy)]
+    bmag_min, bmag_min_err, opt_quad, opt_quad_err, opt_vals_from_fits, opt_vals_from_meas = get_opt_quad(k,
+                                                                                                                    bmagx,
+                                                                                                                    bmagy,
+                                                                                                                    bmagx_err,
+                                                                                                                    bmagy_err)
 
-    norm_emitx = emitx*gamma*beta
-    norm_emitx_err = emitx_err*gamma*beta
-    norm_emity = emity*gamma*beta
-    norm_emity_err = emity_err*gamma*beta 
+    # unpack bmagx/y results
+    bmagx_from_fit, bmagx_from_fit_err_upper, bmagx_from_fit_err_lower = opt_vals_from_fits[0:3]
+    bmagy_from_fit, bmagy_from_fit_err_upper, bmagy_from_fit_err_lower = opt_vals_from_fits[3:]
+
+    bmagx_from_meas, bmagx_from_meas_err_upper, bmagx_from_meas_err_lower = opt_vals_from_meas[0:3]
+    bmagy_from_meas, bmagy_from_meas_err_upper, bmagy_from_meas_err_lower = opt_vals_from_meas[3:]
+
+    """Choose which to use/save"""
+    # TODO: taking mean of errors here, maybe another way is better
+    bmagx = bmagx_from_fit
+    bmagx_err = np.mean(bmagx_from_fit_err_upper, bmagx_from_fit_err_lower)
+    bmagy = bmagy_from_fit
+    bmagy_err = np.mean(bmagy_from_fit_err_upper, bmagy_from_fit_err_lower)
+
+    norm_emitx = emitx * gamma * beta
+    norm_emitx_err = emitx_err * gamma * beta
+    norm_emity = emity * gamma * beta
+    norm_emity_err = emity_err * gamma * beta
     
     #hardcoded
     epics.caput('QUAD:IN10:525:BCTRL',opt_quad)
     # log data
-    save_data(timestamp,norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,\
+    save_data(timestamp,norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,
               str(np.array(xrms)),str(np.array(yrms)),str(kx),str(ky),str(adapt_ranges))
-    numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,bmag,opt_quad,timestamp=timestamp)
+    numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,
+               beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,bmag_min,opt_quad,timestamp=timestamp)
 
+    print(fr"nemitx: {norm_emitx / 1e-6:.2f} +/- {norm_emitx_err / 1e-6:.2f} mm mrad")
+    print(f"nemity: {norm_emity / 1e-6:.2f} +/- {norm_emity_err / 1e-6:.2f} mm mrad")
+    print(f"Bmag at minimum: {bmag_min:.2f} +/- {bmag_min_err:.2f}")
+    print(f"Optimal quad: {opt_quad:.2f} +/- {abs(opt_quad_err):.2f} kG")
+    print("=== from poly fits ===")
+    print(f"Bmagx at opt quad: {bmagx_from_fit:.2f} + {bmagx_from_fit_err_upper:.2f} - {bmagx_from_fit_err_lower:.2f}")
+    print(f"Bmagy at opt quad: {bmagy_from_fit:.2f} + {bmagy_from_fit_err_upper:.2f} - {bmagy_from_fit_err_lower:.2f}")
+    print("=== from measurements ===")
+    print(f"Bmagx at opt quad: {bmagx_from_meas:.2f} +/- {bmagx_from_meas_err_upper:.2f}")
+    print(f"Bmagy at opt quad: {bmagy_from_meas:.2f} +/- {bmagy_from_meas_err_upper:.2f}")
     
-    print(f"nemitx: {norm_emitx/1e-6:.2f}, nemity: {norm_emity/1e-6:.2f}")
-    print(f"nemitx_err: {norm_emitx_err/1e-6:.2f}, nemity_err: {norm_emity_err/1e-6:.2f}")
-    print(f"bmagx: {bmagx:.2f}, bmagy: {bmagy:.2f}")
-    print(f"bmagx_err: {bmagx_err:.2f}, bmagy_err: {bmagy_err:.2f}")
-    
-
-    
-    return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err,np.min(bmag),opt_quad
+    return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err, bmag_min, opt_quad
 
 def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, title_suffix=""):
     """Plot and save the emittance fits of size**2 vs k"""
@@ -431,6 +498,59 @@ def get_quad_field(k, energy=energy, l=l):
     beta = np.sqrt(1-1/gamma**2)
     return np.array(k)*l/0.1/0.2998*energy*beta
 
+def check_symmetry(rms, rms_err, quad, axis):
+    if len(rms) != len(quad):
+        raise Exception('Array lengths do not match!')
+
+    left_side = np.argmin(rms)
+    right_side = len(quad) - left_side - 1
+    stepsize = abs((quad[0] - quad[-1]) / len(quad))
+
+    if left_side == right_side:
+        return None
+
+    elif left_side > right_side:
+        add = "right"
+        diff = left_side - right_side
+        # add points to right_side
+        xmin = quad[-1] + stepsize
+        xmax = xmin + diff * stepsize
+        xadd = np.linspace(xmin, xmax, diff)
+
+    elif right_side > left_side:
+        add = "left"
+        diff = right_side - left_side
+        # add points to left_side
+        xmin = quad[0] - diff * stepsize
+        xmax = quad[0] - stepsize
+        xadd = np.linspace(xmin, xmax, diff)
+
+    # get beamsizes for xadd
+    # this takes B in kG not K
+    ax_idx_size = 1 if axis == "y" else 0
+    ax_idx_err = 3 if axis == "y" else 2
+    sign = -1 if axis == "y" else 1
+
+    rms_add, rms_err_add = [], []
+    for ele in xadd:
+        setquad(sign * get_quad_field(ele))
+        time.sleep(3)
+        beamsizes = get_beamsizes()
+        rms_add.append(beamsizes[ax_idx_size])
+        rms_err_add.append(beamsizes[ax_idx_err])
+
+    # then append to rms and quad
+    if add == "left":
+        new_quad_list = list(xadd) + list(quad)
+        new_rms_list = list(rms_add) + list(rms)
+        new_rms_err_list = list(rms_err_add) + list(rms_err)
+    else:
+        new_quad_list = list(quad) + list(xadd)
+        new_rms_list = list(rms) + list(rms_add)
+        new_rms_err_list = list(rms_err) + list(rms_err_add)
+
+    return np.array(new_quad_list), np.array(new_rms_list), np.array(new_rms_err_list)
+
 def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, num_points=5, save_plot=False, show_plots=True):
     """Returns new scan quad values if called without initial fit coefs"""
     """Returns new coefs if called from fit_sigma with initial fit coefs"""
@@ -465,6 +585,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
             k=-k
             min_k, max_k = np.min(k), np.max(k)
 
+        w = np.sqrt(w ** 2 + y ** 2)  # adding the sizes as extra weights
         fit_coefs, fit_cov = curve_fit(func, k, y**2, sigma=w, absolute_sigma=abs_sigma)
 
         x_fit = np.linspace(min_k, max_k, 100)
@@ -572,12 +693,28 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         fine_fit_sizes_err.append(beamsizes[ax_idx_err])
         #print(fine_fit_sizes)
 
+    x_fine_fit, fine_fit_sizes, fine_fit_sizes_err = check_symmetry(fine_fit_sizes, fine_fit_sizes_err, x_fine_fit,
+                                                                    axis)
+
     if np.isnan(fine_fit_sizes).any():
         not_nan_array = ~np.isnan(fine_fit_sizes)
         fine_fit_sizes = np.array(fine_fit_sizes)[not_nan_array]
         fine_fit_sizes_err = np.array(fine_fit_sizes_err)[not_nan_array]
         x_fine_fit = np.array(x_fine_fit)[not_nan_array]
-        if (len(fine_fit_sizes)<3) or (True not in not_nan_array):
+        if (len(fine_fit_sizes) < 3) or (True not in not_nan_array):
+            return np.nan, np.nan
+
+    # check symmetry again in case many NaNs were dropped, TODO: is this needed?
+    x_fine_fit, fine_fit_sizes, fine_fit_sizes_err = check_symmetry(fine_fit_sizes, fine_fit_sizes_err, x_fine_fit,
+                                                                    axis)
+
+    # TODO: avoid rewriting these! need refactoring
+    if np.isnan(fine_fit_sizes).any():
+        not_nan_array = ~np.isnan(fine_fit_sizes)
+        fine_fit_sizes = np.array(fine_fit_sizes)[not_nan_array]
+        fine_fit_sizes_err = np.array(fine_fit_sizes_err)[not_nan_array]
+        x_fine_fit = np.array(x_fine_fit)[not_nan_array]
+        if (len(fine_fit_sizes) < 3) or (True not in not_nan_array):
             return np.nan, np.nan
 
     fine_fit_sizes, fine_fit_sizes_err = np.array(fine_fit_sizes), np.array(fine_fit_sizes_err)
@@ -586,6 +723,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         abs_sigma = False
     else:
         w = 2*fine_fit_sizes*fine_fit_sizes_err # since we are squaring the beamsize
+        w = np.sqrt(w ** 2 + fine_fit_sizes ** 2)  # adding the sizes as extra weights
         abs_sigma = True
         
     # fit
