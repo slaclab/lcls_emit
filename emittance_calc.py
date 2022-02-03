@@ -96,22 +96,15 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     """Fit sizes^2 = c0 + c1*k + c2*k^2
        returns: c0, c1, c2"""
     sizes = np.array(sizes)
-    
+    k = np.array(k)
 
-    cutoff =4
-    print(k)
-    print(sizes)
-    idx = np.argwhere(sizes<cutoff*np.min(sizes)).flatten()
-    print(idx)
+    # ---------- NOTE: from update on dec 9
+    # cutoff = 4.0
+    # idx = np.argwhere(sizes < cutoff * np.min(sizes)).flatten()
+    # sizes = sizes[idx]
+    # k = k[idx]
+    # ----------
 
-    sizes = sizes[idx]
-    k = k[idx]
-
-    print(k)
-    print(sizes)
-    
-    
-    
     if len(sizes)<3:
         print("Less than 3 data points were passed.")
         return np.nan, np.nan, np.nan, np.nan, np.nan
@@ -435,7 +428,7 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     norm_emity_err = emity_err * gamma * beta
     
     #hardcoded
-    epics.caput('QUAD:IN10:525:BCTRL',opt_quad)
+    # epics.caput('QUAD:IN10:525:BCTRL',opt_quad)
     # log data
     save_data(timestamp,norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,
               str(np.array(xrms)),str(np.array(yrms)),str(kx),str(ky),str(adapt_ranges))
@@ -473,7 +466,7 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
         yerr_plot = None
         
     # fit just for plotting in um
-    coefs, cov = curve_fit(func, x, y/1e-6, sigma=yerr_plot, absolute_sigma=abs_sigma)
+    coefs, cov = curve_fit(func, x, y/1e-6, sigma=yerr_plot, absolute_sigma=abs_sigma, method='trf')
     y_fit = np.array(np.polyval(coefs, x_fit_gauss)) # in um
 
     plt.errorbar(x, y/1e-6, yerr=yerr_plot, marker="x")
@@ -551,26 +544,25 @@ def check_symmetry(rms, rms_err, quad, axis):
 
     return np.array(new_quad_list), np.array(new_rms_list), np.array(new_rms_err_list)
 
-def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, num_points=5, save_plot=False, show_plots=True):
+def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, num_points=5, save_plot=False,
+                show_plots=True):
     """Returns new scan quad values if called without initial fit coefs"""
     """Returns new coefs if called from fit_sigma with initial fit coefs"""
-    cutoff =4
-    print(x)
-    print(y)
-    idx = np.argwhere(y<cutoff*np.min(y)).flatten()
-    print(idx)
-    
+    x = np.array(x)
+    y = np.array(y)
+
+    # ---------- NOTE: from update on dec 9
+    cutoff = 4.0
+    idx = np.argwhere(y < cutoff * np.min(y)).flatten()
     x = x[idx]
     y = y[idx]
-    
-    
-    print('x',x)
-    print('y',y)
-    
+    # # ----------
+
     if w is None:
-        abs_sigma = False
-    else: 
-        abs_sigma = True
+        w = np.sqrt(y ** 2) # adding the sizes as extra weights
+    else:
+        w = np.sqrt(w ** 2 + y ** 2)
+    abs_sigma = True
 
     if fit_coefs is None:
         return_range = True
@@ -585,41 +577,51 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
             k=-k
             min_k, max_k = np.min(k), np.max(k)
 
-        w = np.sqrt(w ** 2 + y ** 2)  # adding the sizes as extra weights
-        fit_coefs, fit_cov = curve_fit(func, k, y**2, sigma=w, absolute_sigma=abs_sigma)
+        #w = np.sqrt(w ** 2 + y ** 2)  # adding the sizes as extra weights
+        fit_coefs, fit_cov = curve_fit(func, k, y ** 2, sigma=w, absolute_sigma=abs_sigma, method='trf')
 
         x_fit = np.linspace(min_k, max_k, 100)
         x=k
     else:
-        return_range = False 
-        
-    if axis == 'x':
-        min_x, max_x = np.min(x), 0
-        # quad ranges 0 to -10 kG for scanning
-        min_x_range, max_x_range = -16.0,-8.9#-20.0, -13.0
-    elif axis == 'y':
-        min_x, max_x = np.min(x), np.max(x)
-        # quad ranges 0 to -10 kG for scanning
-        min_x_range, max_x_range = 16.0, 8.9
-        
+        return_range = False
+
+    # no more restrictions on quad vals, just staying within
+    # the region already scanned (can increase this if need be)
+    min_x_range, max_x_range = x[np.argmin(y)] - 2.5, x[np.argmin(y)] + 2.5
+    # if axis == 'x':
+    #     min_x, max_x = np.min(x), 0
+    #     # quad ranges 0 to -10 kG for scanning
+    #     # min_x_range, max_x_range = -16.0,-8.9#-20.0, -13.0
+    #     min_x_range, max_x_range =   x[np.argmin(y)]-2.5, 0 # x[np.argmin(y)]+3  #np.min(x), 0 #np.max(x)   #HERE + what to do on machine
+    # elif axis == 'y':
+    #     min_x, max_x = np.min(x), np.max(x)
+    #     # quad ranges 0 to -10 kG for scanning
+    #     # min_x_range, max_x_range = 8.9, 16.0
+    #     min_x_range, max_x_range =  x[np.argmin(y)]-2.5, x[np.argmin(y)]+2.5  #HERE these should be larger
+
     c2, c1, c0 = fit_coefs
     
     if c2<0:
         concave_function = True
     else:
         concave_function = False
-    
-    # find range within 2-3x the focus size 
-    y_lim = np.min(np.polyval(fit_coefs, x_fit))*cutoff
-    print('ylm1',y_lim)
-    y_lim = np.min(y**2)*cutoff
-    print('ylm2',y_lim)
+
+    # find range within 2-3x the focus size
+    # cutoff = 1.2-1.3 for lcls
+    # cutoff = 4 for facet and surrogate
+    cutoff = 1.5
+    y_min_poly = np.min(np.polyval(fit_coefs, x_fit))
+    y_lim = np.min(y ** 2) * cutoff
+
+    if y_lim<y_min_poly:
+        # in this case the roots won't exist
+        y_lim = y_min_poly * cutoff
 
     if y_lim<0:
-        print(f"{axis} axis: min. of poly fit is negative. Setting it to 0.")
+        print(f"{axis} axis: min. of poly fit is negative. Setting it to a small val.")
         y_lim = np.mean(y**2)/5
     roots = np.roots((c2, c1, c0-y_lim))
-    print('roots',roots)
+
     # Flag bad fit with complex roots
     if np.iscomplex(roots).any():
         print("Cannot adapt quad ranges, complex root encountered.")

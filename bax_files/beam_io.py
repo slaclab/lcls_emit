@@ -6,16 +6,16 @@ import time
 import datetime
 import matplotlib.pyplot as plt
 
-from image import Image
+from .image import Image
 from os.path import exists
 
 from epics import caget, caput, PV
 import epics
 
-
 ##################################
-rootp = '/home/fphysics/edelen/sw/lcls_emit/'
-#rootp = '/home/physics/edelen/20211209_Injector_MD/'
+# Set rootp directory
+dirname = os.path.dirname(os.path.abspath(__file__))
+rootp = os.path.join(dirname, '')
 
 #load image processing setting info
 im_proc = json.load(open(rootp+'config_files/img_proc.json'))
@@ -30,7 +30,7 @@ roi_ymax = im_proc['roi']['ymax']
 avg_ims = im_proc['avg_ims']
 n_acquire = im_proc['n_to_acquire']
 
-amp_threshold_x = 200 #im_proc['amp_threshold']#1500 
+amp_threshold_x = 200 #im_proc['amp_threshold']#1500
 amp_threshold_y = 200
 min_sigma = 1.0 #im_proc['min_sigma']#1.5 # noise
 max_sigma = 1000 #im_proc['max_sigma']#40 # large/diffuse beam
@@ -121,15 +121,15 @@ def setinjector(set_list):
 def setquad(value):
     """Sets Q525 to new scan value"""
     meas_cntrl_pv.put(value)
-
+    
 #def get_beamsize_inj(set_list_pv, set_list_values, quad=meas_input_pv.get(), use_profMon=False):
 def get_beamsize_inj(set_list, quad=meas_read_pv.get(), use_profMon=False):
     """Get beamsize fn that changes upstream cu injector and returns xrms and yrms in [m]"""   
-    # setinjector(set_list)
-    # setquad(quad)
-    # time.sleep(3)
-    # beamsize = get_beamsizes(use_profMon=use_profMon)
-    # return np.array([beamsize[0], beamsize[1]])
+    #setinjector(set_list)
+    #setquad(quad)
+    #time.sleep(3)
+    #beamsize = get_beamsizes(use_profMon=use_profMon)
+    #return np.array([beamsize[0], beamsize[1]])
 
     
 def quad_control(val=None, action="get"):
@@ -311,8 +311,8 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
     yamp =  np.nan
     beamsizes = [np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]
     im = None
-    
-    
+
+
     #remove hardcoding
     min_sigma=0.00000002
     max_sigma=0.1
@@ -339,7 +339,7 @@ def get_beamsizes(use_profMon=False, reject_bad_beam=True, save_summary = True, 
                 count = count + 1
 
             if not use_profMon:
-                
+
                 #if post:
                 #    beamsizes = getbeamsizes_from_img(post = post)
                 #:
