@@ -39,10 +39,6 @@ l = beamline_info['l']
 twiss0 = beamline_info['Twiss0']
 energy = beamline_info['energy']
 
-# input matlab model matrix here
-mat2 = np.array([ [0, 0] , [0, 0] ])
-s11, s12, s21, s22 = mat2[0,0], mat2[0,1], mat2[1,0], mat2[1,1]
-
 # # scanning quad range
 # meas_min = meas_pv_info['meas_device']['pv']['min']
 # meas_max = meas_pv_info['meas_device']['pv']['max']
@@ -167,17 +163,14 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     c2, c1, c0 = coefs
     coefs_err = np.sqrt(np.diag(cov))
     
-    s11q = c2 / ( s12**2 * l**2 )
-    s12q = ( s12*c1*l - 2*s11*c2 ) / ( 2 * s12**3 * l**2 )
-    s22q = c0/s12**2 + (s11/s12**2/l)**2*c2 - s11/s12**3/l*c1
-    
-    emit2 = s11q*s22q - s12q**2
+    emit2 = (4*c0*c2 - c1**2) / l**2 / (4*d**4)
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             emit = np.sqrt(emit2)
-            # error propagation w/o correlations
-            emit_err = emit * np.sqrt( (coefs_err[0]/c2)**2 + (coefs_err[1]/c1)**2 + (coefs_err[2]/c0)**2 )
+            # error propagation for dependent variables
+            emit_gradient = 1./(4*l*d**2*emit) * np.array([[4*c0, -2*c1, 4*c2]]).T
+            emit_err = np.sqrt(np.matmul(np.matmul(emit_gradient.T, cov), emit_gradient))
             return emit, emit_err[0][0], coefs, coefs_err, k
     except RuntimeWarning:
         #print('error:', emit2)
