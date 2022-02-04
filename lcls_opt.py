@@ -23,13 +23,13 @@ class LclsOpt():
         an axis label (either 'x' or 'y'), and the number of points to use in the
         adapted scan.
         """
-        #try:
+        try:
         new_quad_arr = adapt_range(quad_list, bs_list, axis=axis, num_points=num_points, show_plots=show_plots)
         new_quad_list = new_quad_arr.tolist()
-        # except:
-        #     print("lcls_functions: adapt_range failed. Returning original quad_list.")
+        except:
+             print("lcls_functions: adapt_range failed. Returning original quad_list.")
         #     print(".", end="")
-        #     new_quad_list = quad_list
+             new_quad_list = quad_list
         return new_quad_list
     
     def get_beamsizes_from_machine(self, varx, vary, varz, varscan):
@@ -44,8 +44,8 @@ class LclsOpt():
 
         #### ADAPT RANGES ######
         # TODO: what happens if no new adapted range is returned here
-        new_quad_list_x = self.get_adapted_quad_list(self.varscan, x_rms, 'x', self.num_points_adapt, show_plots=show_plots_here)
-        new_quad_list_y = self.get_adapted_quad_list(self.varscan, y_rms, 'y', self.num_points_adapt, show_plots=show_plots_here)
+        new_quad_list_x = self.get_adapted_quad_list(self.varscan, x_rms, 'x', w=x_err, num_points=self.num_points_adapt, show_plots=show_plots_here)
+        new_quad_list_y = self.get_adapted_quad_list(self.varscan, y_rms, 'y', w=y_err, num_points=self.num_points_adapt, show_plots=show_plots_here)
 
         if new_quad_list_x != self.varscan:
             # set quad 525 to values for new scan

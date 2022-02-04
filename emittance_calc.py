@@ -118,7 +118,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
         return np.nan, np.nan, np.nan, np.nan, np.nan
     
     if sizes_err is not None and sizes.all()>0 and sizes_err.all()>0:
-        w = 2*sizes*np.array(sizes_err) # sigma for poly fit
+        w = 2*np.array(sizes_err) # sigma for poly fit
         w = np.sqrt(w**2 + sizes**2) # adding the sizes as extra weights
         abs_sigma = True
     else:
@@ -516,15 +516,16 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     x = x[idx]
     y = y[idx]
     # # ----------
-
-    if w is None:
-        abs_sigma = False # adding the sizes as extra weights
-    else:
-        w = np.sqrt(w ** 2 + y ** 2)
-        abs_sigma = True
-
+        
     if fit_coefs is None:
         return_range = True
+        
+        if w is None:
+            abs_sigma = False 
+        else:
+            w = 2*np.array(w)
+            w = np.sqrt(w ** 2 + y ** 2)
+            abs_sigma = True
         
         gamma = energy/m_0
         beta = np.sqrt(1-1/gamma**2)
@@ -545,6 +546,10 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
 
     else:
         return_range = False
+        if w is None:
+            abs_sigma = False 
+        else:
+            abs_sigma = True
 
     # no more restrictions on quad vals, just staying within
     # the region already scanned (can increase this if need be)
