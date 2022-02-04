@@ -1,13 +1,16 @@
 import numpy as np
 import scipy.io
-import sys
+import sys, os
 import datetime
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import json
 
-rootp = '/home/fphysics/edelen/sw/lcls_emit/'
-#rootp =  '/home/physics/edelen/20211209_Injector_MD/'
+# Set rootp directory
+dirname = os.path.dirname(os.path.abspath(__file__))
+rootp = os.path.join(dirname, '')
+# rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+# #rootp =  '/home/physics/edelen/20211209_Injector_MD/'
 
 #load info about where to put saving of raw images and summaries; make directories if needed and start headings
 savepaths = json.load(open(rootp+'config_files/savepaths.json'))

@@ -6,28 +6,32 @@ import scipy
 import time
 from scipy.optimize import curve_fit
 # on sim 
-#from beam_io_sim import get_beamsizes
+from beam_io_sim import get_beamsizes
+meas_min, meas_max = -10, 0
 # on lcls
-from beam_io import get_beamsizes, setquad, quad_control
+#from beam_io import get_beamsizes, setquad, quad_control
 import json
 from os.path import exists
 
 
-import epics
-from epics import caget, caput
-def isotime():
-    return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).astimezone().replace(microsecond=0).isoformat()
-isotime()
-
+# import epics
+# from epics import caget, caput
+# def isotime():
+#     return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).astimezone().replace(microsecond=0).isoformat()
+# isotime()
 
 # do not display warnings when cov can't be computed
 # this will happen when len(y)<=3 and yerr=0
 warnings.simplefilter('ignore', scipy.optimize.OptimizeWarning)
-rootp = '/home/fphysics/edelen/sw/lcls_emit/'
-#rootp =  '/home/physics/edelen/20211209_Injector_MD/'
+
+# Set rootp directory
+dirname = os.path.dirname(os.path.abspath(__file__))
+rootp = os.path.join(dirname, '')
+# rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+# #rootp =  '/home/physics/edelen/20211209_Injector_MD/'
 
 beamline_info = json.load(open(rootp+'config_files/beamline_info.json'))
-meas_pv_info = json.load(open(rootp+'config_files/meas_pv_info.json'))
+# meas_pv_info = json.load(open(rootp+'config_files/meas_pv_info.json'))
 
 m_0 = beamline_info['m_0']
 d = beamline_info['d']
@@ -35,36 +39,36 @@ l = beamline_info['l']
 twiss0 = beamline_info['Twiss0']
 energy = beamline_info['energy']
 
-# scanning quad range
-meas_min = meas_pv_info['meas_device']['pv']['min']
-meas_max = meas_pv_info['meas_device']['pv']['max']
+# # scanning quad range
+# meas_min = meas_pv_info['meas_device']['pv']['min']
+# meas_max = meas_pv_info['meas_device']['pv']['max']
 
 
-#load info about where to put saving of raw images and summaries; make directories if needed and start headings
-savepaths = json.load(open(rootp+'config_files/savepaths.json'))
+# #load info about where to put saving of raw images and summaries; make directories if needed and start headings
+# savepaths = json.load(open(rootp+'config_files/savepaths.json'))
 
-pv_savelist = json.load(open(rootp+'config_files/save_scalar_pvs.json'))
+# pv_savelist = json.load(open(rootp+'config_files/save_scalar_pvs.json'))
 
-def mkdir_p(path):
-    """Set up dirs for results in working dir"""
-    try:
-        os.makedirs(path)
-    except OSError as exc:
-        if exc.errno == errno.EEXIST and os.path.isdir(path):
-            pass
-        else:
-            raise
+# def mkdir_p(path):
+#     """Set up dirs for results in working dir"""
+#     try:
+#         os.makedirs(path)
+#     except OSError as exc:
+#         if exc.errno == errno.EEXIST and os.path.isdir(path):
+#             pass
+#         else:
+#             raise
 
-mkdir_p(savepaths['summaries'])
+# mkdir_p(savepaths['summaries'])
 
-file_exists = exists(savepaths['summaries']+"emit_calc_log.csv")
+# file_exists = exists(savepaths['summaries']+"emit_calc_log.csv")
 
-if not file_exists:
+# if not file_exists:
 
-    #todo add others as inputs
-    f= open(savepaths['summaries']+"emit_calc_log.csv", "a+")
-    f.write(f"{'timestamp'},{'nex'},{'ney'},{'bmx'},{'bmy'},{'xsizes'},{'ysizes'},{'kx'},{'ky'},{'adapted'}\n")
-    f.close()
+#     #todo add others as inputs
+#     f= open(savepaths['summaries']+"emit_calc_log.csv", "a+")
+#     f.write(f"{'timestamp'},{'nex'},{'ney'},{'bmx'},{'bmy'},{'xsizes'},{'ysizes'},{'kx'},{'ky'},{'adapted'}\n")
+#     f.close()
 
 def func(x, a, b, c):
     """Polynomial function for emittance fit"""
@@ -127,7 +131,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
     
 
     # FOR DEBUGGING ONLY
-    plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)  
+    #plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, title_suffix="final", show_plots=show_plots)  
     
     if adapt_ranges:
         try:
@@ -148,7 +152,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
             print("Error: Cannot adapt quad ranges due to concave poly. Returning original fit.")
             plot_fit(k, sizes, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)     
     else:
-        plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, show_plots=show_plots)
+        plot_fit(k, sizes, xfit, yerr=sizes_err, axis=axis, save_plot=True, title_suffix="final", show_plots=show_plots)
   
     if np.isnan(coefs).any() or np.isnan(cov).any():
         print('error coeff:',coef, cov)
@@ -169,7 +173,7 @@ def fit_sigma(sizes, k, axis, sizes_err=None, d=d, l=l, adapt_ranges=False, num_
             emit_err = np.sqrt(np.matmul(np.matmul(emit_gradient.T, cov), emit_gradient))
             return emit, emit_err[0][0], coefs, coefs_err, k
     except RuntimeWarning:
-        print('error:', emit2)
+        #print('error:', emit2)
         return np.nan, np.nan, np.nan, np.nan, np.nan 
     
 def propagate_sigma(sigma_mat2, mat2):
@@ -354,8 +358,8 @@ def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err):
     
     save_plot = True
     # DEBUGGING
-    if save_plot:
-        plt.savefig(savepaths['fits'] + f"bmag_otr2_{timestamp}.png", dpi=100)
+    # if save_plot:
+    #     plt.savefig(savepaths['fits'] + f"bmag_otr2_{timestamp}.png", dpi=100)
     plt.show()
     plt.close()
 
@@ -373,7 +377,7 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     beta = np.sqrt(1-1/gamma**2)
     
     # get init quad value in kGauss
-    init_quad = quad_control(action="get")
+    #init_quad = quad_control(action="get")
 
     kx = get_k1(get_gradient(xrange), beta*energy)
     ky = get_k1(get_gradient(yrange), beta*energy)
@@ -388,39 +392,39 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     
     if np.isnan(emitx) or np.isnan(emity):
         print(emitx, emity)
-        save_data(timestamp,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,xrms,yrms,kx,ky,str(adapt_ranges))
-        return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
+        #save_data(timestamp,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,xrms,yrms,kx,ky,str(adapt_ranges))
+        return np.nan, np.nan, np.nan, np.nan#, np.nan, np.nan, np.nan, np.nan
     
     # return quad to init value TODO: do this at every return statement
-    quad_control(init_quad, action="set")
+    #quad_control(init_quad, action="set")
 
     # taking full quad range from 0 to -10 kG
     k = np.linspace(get_k1(get_gradient(meas_min), beta*energy), get_k1(get_gradient(meas_max), beta*energy), 20)
 
-    bmagx, bmagx_err, beta_quad_x, alpha_quad_x = get_bmag(coefsx, coefsx_err, k, emitx, emitx_err,
-                                                           axis='x')
-    bmagy, bmagy_err, beta_quad_y, alpha_quad_y = get_bmag(coefsy, coefsy_err, -k, emity, emity_err,
-                                                           axis='y')
+#     bmagx, bmagx_err, beta_quad_x, alpha_quad_x = get_bmag(coefsx, coefsx_err, k, emitx, emitx_err,
+#                                                            axis='x')
+#     bmagy, bmagy_err, beta_quad_y, alpha_quad_y = get_bmag(coefsy, coefsy_err, -k, emity, emity_err,
+#                                                            axis='y')
 
-    bmag_min, bmag_min_err, opt_quad, opt_quad_err, opt_vals_from_fits, opt_vals_from_meas = get_opt_quad(k,
-                                                                                                                    bmagx,
-                                                                                                                    bmagy,
-                                                                                                                    bmagx_err,
-                                                                                                                    bmagy_err)
+#     bmag_min, bmag_min_err, opt_quad, opt_quad_err, opt_vals_from_fits, opt_vals_from_meas = get_opt_quad(k,
+#                                                                                                                     bmagx,
+#                                                                                                                     bmagy,
+#                                                                                                                     bmagx_err,
+#                                                                                                                     bmagy_err)
 
-    # unpack bmagx/y results
-    bmagx_from_fit, bmagx_from_fit_err_upper, bmagx_from_fit_err_lower = opt_vals_from_fits[0:3]
-    bmagy_from_fit, bmagy_from_fit_err_upper, bmagy_from_fit_err_lower = opt_vals_from_fits[3:]
+#     # unpack bmagx/y results
+#     bmagx_from_fit, bmagx_from_fit_err_upper, bmagx_from_fit_err_lower = opt_vals_from_fits[0:3]
+#     bmagy_from_fit, bmagy_from_fit_err_upper, bmagy_from_fit_err_lower = opt_vals_from_fits[3:]
 
-    bmagx_from_meas, bmagx_from_meas_err_upper, bmagx_from_meas_err_lower = opt_vals_from_meas[0:3]
-    bmagy_from_meas, bmagy_from_meas_err_upper, bmagy_from_meas_err_lower = opt_vals_from_meas[3:]
+#     bmagx_from_meas, bmagx_from_meas_err_upper, bmagx_from_meas_err_lower = opt_vals_from_meas[0:3]
+#     bmagy_from_meas, bmagy_from_meas_err_upper, bmagy_from_meas_err_lower = opt_vals_from_meas[3:]
 
-    """Choose which to use/save"""
-    # TODO: taking mean of errors here, maybe another way is better
-    bmagx = bmagx_from_fit
-    bmagx_err = np.mean(bmagx_from_fit_err_upper, bmagx_from_fit_err_lower)
-    bmagy = bmagy_from_fit
-    bmagy_err = np.mean(bmagy_from_fit_err_upper, bmagy_from_fit_err_lower)
+#     """Choose which to use/save"""
+#     # TODO: taking mean of errors here, maybe another way is better
+#     bmagx = bmagx_from_fit
+#     bmagx_err = np.mean(bmagx_from_fit_err_upper, bmagx_from_fit_err_lower)
+#     bmagy = bmagy_from_fit
+#     bmagy_err = np.mean(bmagy_from_fit_err_upper, bmagy_from_fit_err_lower)
 
     norm_emitx = emitx * gamma * beta
     norm_emitx_err = emitx_err * gamma * beta
@@ -430,23 +434,24 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     #hardcoded
     # epics.caput('QUAD:IN10:525:BCTRL',opt_quad)
     # log data
-    save_data(timestamp,norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,
-              str(np.array(xrms)),str(np.array(yrms)),str(kx),str(ky),str(adapt_ranges))
-    numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,
-               beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,bmag_min,opt_quad,timestamp=timestamp)
+    # save_data(timestamp,norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,
+    #           str(np.array(xrms)),str(np.array(yrms)),str(kx),str(ky),str(adapt_ranges))
+    # numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,
+    #            beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,bmag_min,opt_quad,timestamp=timestamp)
 
     print(fr"nemitx: {norm_emitx / 1e-6:.2f} +/- {norm_emitx_err / 1e-6:.2f} mm mrad")
     print(f"nemity: {norm_emity / 1e-6:.2f} +/- {norm_emity_err / 1e-6:.2f} mm mrad")
-    print(f"Bmag at minimum: {bmag_min:.2f} +/- {bmag_min_err:.2f}")
-    print(f"Optimal quad: {opt_quad:.2f} +/- {abs(opt_quad_err):.2f} kG")
-    print("=== from poly fits ===")
-    print(f"Bmagx at opt quad: {bmagx_from_fit:.2f} + {bmagx_from_fit_err_upper:.2f} - {bmagx_from_fit_err_lower:.2f}")
-    print(f"Bmagy at opt quad: {bmagy_from_fit:.2f} + {bmagy_from_fit_err_upper:.2f} - {bmagy_from_fit_err_lower:.2f}")
-    print("=== from measurements ===")
-    print(f"Bmagx at opt quad: {bmagx_from_meas:.2f} +/- {bmagx_from_meas_err_upper:.2f}")
-    print(f"Bmagy at opt quad: {bmagy_from_meas:.2f} +/- {bmagy_from_meas_err_upper:.2f}")
+    # print(f"Bmag at minimum: {bmag_min:.2f} +/- {bmag_min_err:.2f}")
+    # print(f"Optimal quad: {opt_quad:.2f} +/- {abs(opt_quad_err):.2f} kG")
+    # print("=== from poly fits ===")
+    # print(f"Bmagx at opt quad: {bmagx_from_fit:.2f} + {bmagx_from_fit_err_upper:.2f} - {bmagx_from_fit_err_lower:.2f}")
+    # print(f"Bmagy at opt quad: {bmagy_from_fit:.2f} + {bmagy_from_fit_err_upper:.2f} - {bmagy_from_fit_err_lower:.2f}")
+    # print("=== from measurements ===")
+    # print(f"Bmagx at opt quad: {bmagx_from_meas:.2f} +/- {bmagx_from_meas_err_upper:.2f}")
+    # print(f"Bmagy at opt quad: {bmagy_from_meas:.2f} +/- {bmagy_from_meas_err_upper:.2f}")
     
-    return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err, bmag_min, opt_quad
+    #return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err, bmag_min, opt_quad
+    return norm_emitx, norm_emity, norm_emitx_err, norm_emity_err
 
 def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, title_suffix=""):
     """Plot and save the emittance fits of size**2 vs k"""
@@ -478,8 +483,8 @@ def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, ti
     timestamp = (datetime.datetime.now()).strftime("%Y-%m-%d_%H-%M-%S-%f")
     
     # # DEBUGGING
-    if save_plot:
-        plt.savefig(savepaths['fits'] + f"emittance_{axis}_fit_{timestamp}.png", dpi=100)
+    # if save_plot:
+    #     plt.savefig(savepaths['fits'] + f"emittance_{axis}_fit_{timestamp}.png", dpi=100)
 
     if show_plots:
         plt.show()
@@ -490,59 +495,6 @@ def get_quad_field(k, energy=energy, l=l):
     gamma = energy/m_0
     beta = np.sqrt(1-1/gamma**2)
     return np.array(k)*l/0.1/0.2998*energy*beta
-
-def check_symmetry(rms, rms_err, quad, axis):
-    if len(rms) != len(quad):
-        raise Exception('Array lengths do not match!')
-
-    left_side = np.argmin(rms)
-    right_side = len(quad) - left_side - 1
-    stepsize = abs((quad[0] - quad[-1]) / len(quad))
-
-    if left_side == right_side:
-        return None
-
-    elif left_side > right_side:
-        add = "right"
-        diff = left_side - right_side
-        # add points to right_side
-        xmin = quad[-1] + stepsize
-        xmax = xmin + diff * stepsize
-        xadd = np.linspace(xmin, xmax, diff)
-
-    elif right_side > left_side:
-        add = "left"
-        diff = right_side - left_side
-        # add points to left_side
-        xmin = quad[0] - diff * stepsize
-        xmax = quad[0] - stepsize
-        xadd = np.linspace(xmin, xmax, diff)
-
-    # get beamsizes for xadd
-    # this takes B in kG not K
-    ax_idx_size = 1 if axis == "y" else 0
-    ax_idx_err = 3 if axis == "y" else 2
-    sign = -1 if axis == "y" else 1
-
-    rms_add, rms_err_add = [], []
-    for ele in xadd:
-        setquad(sign * get_quad_field(ele))
-        time.sleep(3)
-        beamsizes = get_beamsizes()
-        rms_add.append(beamsizes[ax_idx_size])
-        rms_err_add.append(beamsizes[ax_idx_err])
-
-    # then append to rms and quad
-    if add == "left":
-        new_quad_list = list(xadd) + list(quad)
-        new_rms_list = list(rms_add) + list(rms)
-        new_rms_err_list = list(rms_err_add) + list(rms_err)
-    else:
-        new_quad_list = list(quad) + list(xadd)
-        new_rms_list = list(rms) + list(rms_add)
-        new_rms_err_list = list(rms_err) + list(rms_err_add)
-
-    return np.array(new_quad_list), np.array(new_rms_list), np.array(new_rms_err_list)
 
 def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, num_points=5, save_plot=False,
                 show_plots=True):
@@ -559,10 +511,10 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
     # # ----------
 
     if w is None:
-        w = np.sqrt(y ** 2) # adding the sizes as extra weights
+        abs_sigma = False # adding the sizes as extra weights
     else:
         w = np.sqrt(w ** 2 + y ** 2)
-    abs_sigma = True
+        abs_sigma = True
 
     if fit_coefs is None:
         return_range = True
@@ -577,11 +529,13 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
             k=-k
             min_k, max_k = np.min(k), np.max(k)
 
-        #w = np.sqrt(w ** 2 + y ** 2)  # adding the sizes as extra weights
         fit_coefs, fit_cov = curve_fit(func, k, y ** 2, sigma=w, absolute_sigma=abs_sigma, method='trf')
 
         x_fit = np.linspace(min_k, max_k, 100)
         x=k
+        
+        plot_fit(k, y, x_fit, yerr=w, axis=axis, save_plot=False, title_suffix="initial", show_plots=show_plots)  
+
     else:
         return_range = False
 
@@ -644,7 +598,7 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
         # (assuming it is closer to the local minimum)
         x_min_concave = x[np.argmin(y)]
         #find the direction of sampling to minimum
-        if (x[np.argmin(y)] - x[np.argmin(y)-2])<0:
+        if (x[np.argmin(y)] - x[abs(np.argmin(y)-2)])<0:
             x_max_concave = min_x_range
         else:
             x_max_concave = max_x_range
@@ -741,39 +695,39 @@ def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, n
              save_plot=save_plot, show_plots=show_plots, title_suffix=" - adapted range")
     return coefs, cov, x_fine_fit
 
-def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,bmag,opt_quad,timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['emit_saves']):
+# def numpy_save(norm_emitx,norm_emity,bmagx,bmagy,norm_emitx_err,norm_emity_err,bmagx_err,bmagy_err,beta_quad_x,alpha_quad_x,beta_quad_y,alpha_quad_y,bmag,opt_quad,timestamp=False,savelist = pv_savelist['scalars'],path =savepaths['emit_saves']):
 
-    ts = isotime()
-    x = epics.caget_many(savelist)
-    x.append(ts)
-    if timestamp:
-        x.append(timestamp)
-    else:
-        x.append(ts)
+#     ts = isotime()
+#     x = epics.caget_many(savelist)
+#     x.append(ts)
+#     if timestamp:
+#         x.append(timestamp)
+#     else:
+#         x.append(ts)
 
-    x.append(norm_emitx)
-    x.append(norm_emity)
-    x.append(bmagx)
-    x.append(bmagy)
-    x.append(norm_emitx_err)
-    x.append(norm_emity_err)
-    x.append(bmagx_err)
-    x.append(bmagy_err)
-    x.append(beta_quad_x)
-    x.append(alpha_quad_x)
-    x.append(beta_quad_y)
-    x.append(alpha_quad_y)
-    x.append(bmag)
-    x.append(opt_quad)
+#     x.append(norm_emitx)
+#     x.append(norm_emity)
+#     x.append(bmagx)
+#     x.append(bmagy)
+#     x.append(norm_emitx_err)
+#     x.append(norm_emity_err)
+#     x.append(bmagx_err)
+#     x.append(bmagy_err)
+#     x.append(beta_quad_x)
+#     x.append(alpha_quad_x)
+#     x.append(beta_quad_y)
+#     x.append(alpha_quad_y)
+#     x.append(bmag)
+#     x.append(opt_quad)
 
 
-    np.save(path+ts+'_x_.npy',np.array(x))
+#     np.save(path+ts+'_x_.npy',np.array(x))
 
     
-def save_data(timestamp, nex, ney, bmx, bmy, nex_err, ney_err, bmx_err, bmy_err, xsizes, ysizes, kx, ky, adapted):
-    f= open(savepaths['summaries']+"emit_calc_log.csv", "a+")
-    f.write(f"{timestamp},{nex},{ney},{bmx},{bmy},{xsizes},{ysizes},{kx},{ky},{adapted}\n")
-    f.close()
+# def save_data(timestamp, nex, ney, bmx, bmy, nex_err, ney_err, bmx_err, bmy_err, xsizes, ysizes, kx, ky, adapted):
+#     f= open(savepaths['summaries']+"emit_calc_log.csv", "a+")
+#     f.write(f"{timestamp},{nex},{ney},{bmx},{bmy},{xsizes},{ysizes},{kx},{ky},{adapted}\n")
+#     f.close()
 
 class ConcaveFitError(Exception):
     """Raised when the adapted range emit 

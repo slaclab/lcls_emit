@@ -7,7 +7,7 @@ import numpy as np
 
 # TODO: implement class
 
-def check_symmetry(y, x, axis):
+def check_symmetry(x, y):
     """Check symmetry of quad scan around min of scan
     and find side (left or right) and num of beamsize
     points to add to get a full curve"""
@@ -41,9 +41,9 @@ def check_symmetry(y, x, axis):
 
     # return the x-vals to add
     # x_add are in same units as passed to fn
-    return add_to_side, x_add, axis
+    return add_to_side, x_add
 
-def add_measurements(add_to_side, x_add, x, y, y_err, axis):
+def add_measurements(add_to_side, x_add, x, y, y_err, axis, bs_fn=None):
     """Add beamsize measurements on left or right side based on
     symmetry of scan curve.
     x_add are the quad scan values k in units of 1/m^2"""
@@ -80,7 +80,7 @@ def add_measurements(add_to_side, x_add, x, y, y_err, axis):
     # returns values in units of 1/m^2
     return np.array(new_x_list), np.array(new_y_list), np.array(new_y_err_list)
 
-def find_inflection_pnt(y, x, show_plots=True):
+def find_inflection_pnt(x, y, show_plots=True):
     """Find inflection points in curve and remove
     points outside of convex region around min"""
 

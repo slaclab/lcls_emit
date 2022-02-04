@@ -470,7 +470,6 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     # return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err, bmag_min, opt_quad
     return norm_emitx, norm_emity, norm_emitx_err, norm_emity_err
 
-
 def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, title_suffix=""):
     """Plot and save the emittance fits of size**2 vs k"""
     import matplotlib.pyplot as plt

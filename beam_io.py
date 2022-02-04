@@ -14,8 +14,11 @@ import epics
 
 
 ##################################
-rootp = '/home/fphysics/edelen/sw/lcls_emit/'
-#rootp = '/home/physics/edelen/20211209_Injector_MD/'
+# Set rootp directory
+dirname = os.path.dirname(os.path.abspath(__file__))
+rootp = os.path.join(dirname, '')
+# rootp = '/home/fphysics/edelen/sw/lcls_emit/'
+# #rootp = '/home/physics/edelen/20211209_Injector_MD/'
 
 #load image processing setting info
 im_proc = json.load(open(rootp+'config_files/img_proc.json'))
