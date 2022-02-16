@@ -1,15 +1,14 @@
 # SETUP FILE FOR LCLS CU INJECTOR
 import numpy as np
-import sys, os, errno
+import  os, errno
 import json
 import time
 import datetime
-import matplotlib.pyplot as plt
 
 from image import Image
 from os.path import exists
 
-from epics import caget, caput, PV
+from epics import caget,  PV
 import epics
 
 ##################################

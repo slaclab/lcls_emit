@@ -1,13 +1,5 @@
 import numpy as np
 import sys
-import json
-import time
-import datetime
-
-import scipy.io
-import scipy.ndimage as snd
-from scipy.stats import moment
-from scipy.optimize import curve_fit
 
 sys.path.append('/home/fphysics/cemma/git_work/lcls_emit/Emit_from_lcls/tofacet/')
 
@@ -16,10 +8,8 @@ try:
 except:
     print("did not import epics")
     
-from image import Image
 from emittance_calc import *
 from beam_io import *
-import matplotlib.pyplot as plt
 
 # get PV info
 pv_info = json.load(open('/home/fphysics/cemma/git_work/lcls_emit/Emit_from_lcls/tofacet/pv_info.json'))

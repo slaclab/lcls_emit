@@ -299,7 +299,7 @@ def get_bmag(coefs, coefs_err, k, emit, emit_err, axis, twiss0=twiss0):
     # return bmag_list
     return bmag, bmag_err, beta_quad, alpha_quad
 
-
+'''' FN BELOW '''
 def get_opt_quad(k, bmagx, bmagy, bmagx_err, bmagy_err):
     from numpy.polynomial.polynomial import polyval
     import matplotlib.pyplot as plt
@@ -482,7 +482,7 @@ def get_normemit(energy, xrange, yrange, xrms, yrms, xrms_err=None, yrms_err=Non
     # return norm_emitx, norm_emity, bmagx, bmagy, norm_emitx_err, norm_emity_err, bmagx_err, bmagy_err, bmag_min, opt_quad
     return norm_emitx, norm_emity, norm_emitx_err, norm_emity_err
 
-
+'''BELOW'''
 def plot_fit(x, y, x_fit, axis, yerr=None, save_plot=False, show_plots=False, title_suffix=""):
     """Plot and save the emittance fits of size**2 vs k"""
     import matplotlib.pyplot as plt
@@ -527,7 +527,7 @@ def get_quad_field(k, energy=energy, l=l):
     beta = np.sqrt(1 - 1 / gamma ** 2)
     return np.array(k) * l / 0.1 / 0.2998 * energy * beta
 
-
+''''BELOW w/BAX file'''
 def adapt_range(x, y, axis, w=None, fit_coefs=None, x_fit=None, energy=energy, num_points=5, save_plot=False,
                 show_plots=True):
     """Returns new scan quad values if called without initial fit coefs"""

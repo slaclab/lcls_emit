@@ -1,14 +1,10 @@
 
     
-import sys, os, errno
-import json
-import time
-import datetime
-import matplotlib.pyplot as plt
+import  errno
 
 from image import Image
 from os.path import exists
-from epics import caget, caput, PV
+from epics import caget,  PV
 import epics
 
 def isotime():
@@ -16,10 +12,6 @@ def isotime():
 isotime()
     
 import numpy as np
-import scipy.io
-import sys
-import matplotlib.pyplot as plt
-from scipy.optimize import curve_fit
 
 from fitting_methods import *
 
